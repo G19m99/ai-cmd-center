@@ -477,7 +477,9 @@ func preferCodexWebsocketAuths(ctx context.Context, provider string, available [
 	return available
 }
 
-func collectAvailableByPriority(auths []*Auth, model string, now time.Time) (available map[int][]*Auth, cooldownCount int, earliest time.Time) {
+// collectAvailableByPriority also returns the blocked auth that frees earliest
+// (earliestAuth) so the all-limited error can name it.
+func collectAvailableByPriority(auths []*Auth, model string, now time.Time) (available map[int][]*Auth, cooldownCount int, earliest time.Time, earliestAuth *Auth) {
 	available = make(map[int][]*Auth)
 	for i := 0; i < len(auths); i++ {
 		candidate := auths[i]
@@ -492,9 +494,10 @@ func collectAvailableByPriority(auths []*Auth, model string, now time.Time) (ava
 		}
 		if reason != blockReasonDisabled && next.After(now) && (earliest.IsZero() || next.Before(earliest)) {
 			earliest = next
+			earliestAuth = candidate
 		}
 	}
-	return available, cooldownCount, earliest
+	return available, cooldownCount, earliest, earliestAuth
 }
 
 func getAvailableAuths(auths []*Auth, provider, model string, now time.Time) ([]*Auth, error) {
@@ -536,7 +539,7 @@ func getAvailableAuthsWithPriorityMode(auths []*Auth, provider, model string, no
 		return nil, &Error{Code: "auth_not_found", Message: "no auth candidates"}
 	}
 
-	availableByPriority, cooldownCount, earliest := collectAvailableByPriority(auths, model, now)
+	availableByPriority, cooldownCount, earliest, earliestAuth := collectAvailableByPriority(auths, model, now)
 	if len(availableByPriority) == 0 {
 		if cooldownCount == len(auths) && !earliest.IsZero() {
 			providerForError := provider
@@ -547,7 +550,7 @@ func getAvailableAuthsWithPriorityMode(auths []*Auth, provider, model string, no
 			if resetIn < 0 {
 				resetIn = 0
 			}
-			return nil, newModelCooldownError(model, providerForError, resetIn)
+			return nil, nameAllLimitedAccount(newModelCooldownError(model, providerForError, resetIn), earliestAuth, earliest, now)
 		}
 		return nil, newAuthUnavailableError(earliest, now)
 	}

@@ -205,6 +205,66 @@ func newAllLimitedErrorAt(provider, model string, freeAt time.Time, account, win
 	return err
 }
 
+// cooldownWindowMatchTolerance is how far a snapshot window's reset may sit
+// from an upstream cooldown's retry time and still be named as its cause.
+const cooldownWindowMatchTolerance = 5 * time.Minute
+
+// cooldownFallbackWindow is the window label when no snapshot explains a cooldown.
+const cooldownFallbackWindow = "cooldown"
+
+// nameAllLimitedAccount fills in the account parenthetical of an all-limited
+// error raised by the upstream cooldown path (every account blocked by a real
+// 429 before the reset-aware ranker runs). auth is the blocked account whose
+// retry time freeAt comes first; a nil auth or zero freeAt leaves err alone.
+// The window is the label of the full snapshot window resetting at about
+// freeAt, else "cooldown". JSON fields (reset_seconds, reset_time, ...) are
+// untouched: only the message gains "(account, window limit)".
+func nameAllLimitedAccount(err *modelCooldownError, auth *Auth, freeAt, now time.Time) *modelCooldownError {
+	if err == nil || auth == nil || freeAt.IsZero() {
+		return err
+	}
+	err.freeAt = freeAt
+	err.now = now
+	err.account = authDisplayLabel(auth)
+	err.window = cooldownWindowLabel(DefaultQuotaSnapshots(), auth.ID, err.model, freeAt, now)
+	return err
+}
+
+// cooldownWindowLabel names the routing window in authID's snapshot that is
+// full and resets within cooldownWindowMatchTolerance of freeAt (closest wins),
+// or cooldownFallbackWindow when no window explains the cooldown.
+func cooldownWindowLabel(store *QuotaSnapshotStore, authID, model string, freeAt, now time.Time) string {
+	snap, ok := store.Get(authID)
+	if !ok {
+		return cooldownFallbackWindow
+	}
+	label := ""
+	var bestGap time.Duration
+	for _, window := range snap.Windows {
+		if !relevantQuotaWindow(window, model) || window.ResetsAt.IsZero() || effectiveUtilization(window, now) < 100 {
+			continue
+		}
+		gap := window.ResetsAt.Sub(freeAt)
+		if gap < 0 {
+			gap = -gap
+		}
+		if gap > cooldownWindowMatchTolerance {
+			continue
+		}
+		if label != "" && gap >= bestGap {
+			continue
+		}
+		label, bestGap = window.Label, gap
+		if label == "" {
+			label = window.Key
+		}
+	}
+	if label == "" {
+		return cooldownFallbackWindow
+	}
+	return label
+}
+
 func authDisplayLabel(auth *Auth) string {
 	if auth == nil {
 		return ""

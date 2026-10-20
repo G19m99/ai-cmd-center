@@ -480,3 +480,137 @@ func TestModelCooldownError_UpstreamPathFriendlyForClaude(t *testing.T) {
 		t.Fatalf("gemini message = %q, want %q", message, want)
 	}
 }
+
+// cooldownAuth builds an account blocked by a real 429: unavailable with a
+// quota cooldown that frees at next. This is the state upstream availability
+// filtering rejects before the reset-aware ranker runs.
+func cooldownAuth(id, label string, next time.Time) *Auth {
+	return &Auth{
+		ID:             id,
+		Provider:       "claude",
+		Label:          label,
+		Unavailable:    true,
+		NextRetryAfter: next,
+		Quota:          QuotaState{Exceeded: true, NextRecoverAt: next},
+	}
+}
+
+func TestGetAvailableAuths_AllCooldownNamesEarliestAccount(t *testing.T) {
+	now := time.Date(2026, 10, 20, 15, 0, 0, 0, time.Local)
+	const idA, idB = "cooldown-test-claude-a", "cooldown-test-claude-b"
+	// claude-b is listed first and frees later: the earliest one must win.
+	auths := []*Auth{
+		cooldownAuth(idB, "claude-b", now.Add(3*time.Hour)),
+		cooldownAuth(idA, "claude-a", now.Add(40*time.Minute)),
+	}
+
+	// A snapshot showing a full 5-hour window resetting at about the retry time names the window.
+	DefaultQuotaSnapshots().Put(QuotaSnapshot{
+		AuthID:   idA,
+		Provider: "claude",
+		Windows: []QuotaWindow{
+			fiveHourWindow(100, now.Add(41*time.Minute)),
+			sevenDayWindow(60, now.Add(24*time.Hour)),
+		},
+		FetchedAt: now,
+	})
+	t.Cleanup(func() { DefaultQuotaSnapshots().Delete(idA) })
+
+	_, err := getAvailableAuths(auths, "claude", "claude-sonnet-5-5", now)
+	if err == nil {
+		t.Fatal("getAvailableAuths() error = nil, want all-limited error")
+	}
+	var mce *modelCooldownError
+	if !errors.As(err, &mce) {
+		t.Fatalf("error = %T (%v), want *modelCooldownError", err, err)
+	}
+	message, rawErr := cooldownMessage(t, err)
+	want := "All Claude accounts are limited. Earliest frees at 3:40 PM (claude-a, 5-hour limit)."
+	if message != want {
+		t.Fatalf("message = %q, want %q", message, want)
+	}
+	// The JSON fields of the upstream error are unchanged.
+	if got, _ := rawErr["reset_seconds"].(float64); got != 2400 {
+		t.Fatalf("reset_seconds = %v, want 2400", got)
+	}
+	if got, _ := rawErr["reset_time"].(string); got != "40m0s" {
+		t.Fatalf("reset_time = %q, want 40m0s", got)
+	}
+	if got, _ := rawErr["code"].(string); got != "model_cooldown" {
+		t.Fatalf("code = %q, want model_cooldown", got)
+	}
+	if got, _ := rawErr["provider"].(string); got != "claude" {
+		t.Fatalf("provider = %q, want claude", got)
+	}
+	if got, _ := rawErr["model"].(string); got != "claude-sonnet-5-5" {
+		t.Fatalf("model = %q, want claude-sonnet-5-5", got)
+	}
+	if got := mce.Headers().Get("Retry-After"); got != "2400" {
+		t.Fatalf("Retry-After = %q, want 2400", got)
+	}
+
+	// Without a matching snapshot window the limit is reported as a cooldown.
+	DefaultQuotaSnapshots().Delete(idA)
+	_, err = getAvailableAuths(auths, "claude", "claude-sonnet-5-5", now)
+	message, _ = cooldownMessage(t, err)
+	want = "All Claude accounts are limited. Earliest frees at 3:40 PM (claude-a, cooldown limit)."
+	if message != want {
+		t.Fatalf("message without snapshot = %q, want %q", message, want)
+	}
+
+	// A full window resetting at a different time does not explain this cooldown.
+	DefaultQuotaSnapshots().Put(QuotaSnapshot{
+		AuthID:    idA,
+		Provider:  "claude",
+		Windows:   []QuotaWindow{sevenDayWindow(100, now.Add(24*time.Hour))},
+		FetchedAt: now,
+	})
+	_, err = getAvailableAuths(auths, "claude", "claude-sonnet-5-5", now)
+	message, _ = cooldownMessage(t, err)
+	if message != want {
+		t.Fatalf("message with unrelated window = %q, want %q", message, want)
+	}
+
+	// Without a label the ID names the account.
+	unlabeled := []*Auth{cooldownAuth(idB, "", now.Add(3*time.Hour)), cooldownAuth(idA, "", now.Add(40*time.Minute))}
+	_, err = getAvailableAuths(unlabeled, "claude", "claude-sonnet-5-5", now)
+	message, _ = cooldownMessage(t, err)
+	if want := "All Claude accounts are limited. Earliest frees at 3:40 PM (" + idA + ", cooldown limit)."; message != want {
+		t.Fatalf("message without label = %q, want %q", message, want)
+	}
+}
+
+func TestManagerAvailability_AllCooldownNamesEarliestAccount(t *testing.T) {
+	now := time.Date(2026, 10, 20, 15, 0, 0, 0, time.Local)
+	const idA, idB = "manager-cooldown-test-claude-a", "manager-cooldown-test-claude-b"
+	auths := []*Auth{
+		cooldownAuth(idB, "claude-b", now.Add(3*time.Hour)),
+		cooldownAuth(idA, "claude-a", now.Add(40*time.Minute)),
+	}
+	DefaultQuotaSnapshots().Put(QuotaSnapshot{
+		AuthID:    idA,
+		Provider:  "claude",
+		Windows:   []QuotaWindow{fiveHourWindow(100, now.Add(40*time.Minute))},
+		FetchedAt: now,
+	})
+	t.Cleanup(func() { DefaultQuotaSnapshots().Delete(idA) })
+
+	selector := NewSessionAffinitySelector(NewResetAwareSelector(ResetAwareConfig{Now: func() time.Time { return now }}))
+	t.Cleanup(selector.Stop)
+	manager := NewManager(nil, selector, nil)
+
+	// This is the pass that runs before the reset-aware selector on the live
+	// request path (pickNextLegacy -> availableAuthsForSelector).
+	_, err := manager.availableAuthsForRouteModelAcrossPriorities(auths, "claude", "claude-sonnet-5-5", now)
+	if err == nil {
+		t.Fatal("availableAuthsForRouteModelAcrossPriorities() error = nil, want all-limited error")
+	}
+	message, rawErr := cooldownMessage(t, err)
+	want := "All Claude accounts are limited. Earliest frees at 3:40 PM (claude-a, 5-hour limit)."
+	if message != want {
+		t.Fatalf("message = %q, want %q", message, want)
+	}
+	if got, _ := rawErr["reset_seconds"].(float64); got != 2400 {
+		t.Fatalf("reset_seconds = %v, want 2400", got)
+	}
+}
