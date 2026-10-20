@@ -83,6 +83,18 @@ describe('BonusResetBadge', () => {
     );
   });
 
+  test('labels the Codex windows instead of showing raw keys', () => {
+    const expiresAt = new Date(2026, 9, 25, 9, 0, 0).toISOString();
+    expect(
+      renderBadge({
+        known: true,
+        available: 1,
+        clears: ['primary_window', 'secondary_window'],
+        expiresAt,
+      })
+    ).toBe('1 reset available · clears 5-hour, Weekly · expires 10/25');
+  });
+
   test('reads unknown when the reset-credit read failed', () => {
     expect(renderBadge({ known: false, available: 0, clears: [] })).toBe('resets: unknown');
   });

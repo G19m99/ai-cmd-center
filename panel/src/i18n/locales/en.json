@@ -2261,6 +2261,8 @@
     "window_five_hour": "5-hour",
     "window_seven_day": "7-day",
     "window_seven_day_overage_included": "7-day overage",
+    "window_primary_window": "5-hour",
+    "window_secondary_window": "Weekly",
     "bonus_available_one": "{{count}} reset available",
     "bonus_available_other": "{{count}} resets available",
     "bonus_clears": "clears {{windows}}",

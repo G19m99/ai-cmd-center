@@ -2260,6 +2260,8 @@
     "window_five_hour": "5 小时",
     "window_seven_day": "7 天",
     "window_seven_day_overage_included": "7 天（含超额）",
+    "window_primary_window": "5 小时",
+    "window_secondary_window": "每周",
     "bonus_available_one": "{{count}} 次重置可用",
     "bonus_available_other": "{{count}} 次重置可用",
     "bonus_clears": "清除 {{windows}}",

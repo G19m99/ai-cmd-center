@@ -39,6 +39,12 @@ describe('windowLabel', () => {
     expect(windowLabel(t, 'seven_day')).toBe('7-day');
     expect(windowLabel(t, 'custom')).toBe('custom');
   });
+
+  test('maps the Codex window keys', () => {
+    const t = (key: string) => key;
+    expect(windowLabel(t, 'primary_window')).toBe('routing.window_primary_window');
+    expect(windowLabel(t, 'secondary_window')).toBe('routing.window_secondary_window');
+  });
 });
 
 describe('accountDisplayName', () => {

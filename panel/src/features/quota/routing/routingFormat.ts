@@ -72,7 +72,14 @@ export function formatShortDate(ms: number, locale?: string): string {
   return formatter.format(new Date(ms));
 }
 
-const KNOWN_WINDOW_KEYS = new Set(['five_hour', 'seven_day', 'seven_day_overage_included']);
+/** Claude (`five_hour`, `seven_day`, ...) and Codex (`primary_window`, `secondary_window`) keys. */
+const KNOWN_WINDOW_KEYS = new Set([
+  'five_hour',
+  'seven_day',
+  'seven_day_overage_included',
+  'primary_window',
+  'secondary_window',
+]);
 
 /** Human label for a quota window key the server reports (`seven_day` → `7-day`). */
 export function windowLabel(t: Translate, key: string): string {
