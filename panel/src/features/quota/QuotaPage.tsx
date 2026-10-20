@@ -20,12 +20,20 @@ import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useNow } from '@/hooks/useNow';
 import { useRevealGroup } from '@/hooks/motion';
 import { useAuthStore, useQuotaStore, useThemeStore } from '@/stores';
+import type { RoutingAccount } from '@/services/api/routingState';
 import type { AuthFileItem, ResolvedTheme } from '@/types';
+import { normalizeAuthIndex } from '@/utils/authIndex';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
 import { ProviderTabs } from '@/features/authFiles/components/ProviderTabs';
 import { QuotaHeader } from './components/QuotaHeader';
 import { QuotaCard } from './components/QuotaCard';
 import { QuotaTimeline } from './components/QuotaTimeline';
+import { BonusResetBanner } from './routing/BonusResetBanner';
+import { ProviderSummaryCards } from './routing/ProviderSummaryCards';
+import { isRoutedQuotaType, maskAccountName, quotaAccountElementId } from './routing/routingFormat';
+import { useRoutingState } from './routing/useRoutingState';
+import { bindQuotaClasses } from './types';
+import bodyStyles from './components/QuotaBody.module.scss';
 import {
   CARD_ENTRANCE_BUDGET_MS,
   QUOTA_PAGE_SIZE,
@@ -55,6 +63,10 @@ import styles from './QuotaPage.module.scss';
 
 const TAB_IDS: string[] = ['all', ...QUOTA_TAB_ORDER];
 const SKELETON_CARD_COUNT = 6;
+const summaryClasses = bindQuotaClasses(bodyStyles, 'QuotaBody.module.scss');
+
+const authIndexOf = (file: AuthFileItem): string | null =>
+  normalizeAuthIndex(file.auth_index ?? file.authIndex);
 
 /**
  * Existing providers display filenames; Devin's card and timeline share an
@@ -248,6 +260,48 @@ export function QuotaPage() {
     });
   }, [entries, error, filesGeneration, loading, sessionGeneration]);
 
+  /* ---------- 路由状态（fork）----------
+   * 每 30s 轮询（页面可见时）；单卡「刷新额度」后再 POST 一次该账号的刷新。
+   * 老服务端 404 → routing.state 为 null，卡片退回上游样式。 */
+
+  const routing = useRoutingState(connectionStatus === 'connected');
+  const { load: loadRouting, refreshAccount: refreshRoutingAccount } = routing;
+  const routingNow = useNow();
+  const routingLabelFor = useCallback(
+    (account: RoutingAccount) => {
+      const match = entries.find((entry) => authIndexOf(entry.file) === account.authIndex);
+      const name = match ? match.file.name : account.label;
+      return routing.showEmails ? name : maskAccountName(name);
+    },
+    [entries, routing.showEmails]
+  );
+  const summaryCounts = useMemo(
+    () => ({ claude: tabCounts.claude ?? 0, codex: tabCounts.codex ?? 0 }),
+    [tabCounts]
+  );
+
+  // Banner → row: switch to the account's provider tab, clear the search, then
+  // scroll once the row has rendered.
+  const pendingJumpRef = useRef<string | null>(null);
+  const handleJumpToAccount = useCallback((account: RoutingAccount) => {
+    pendingJumpRef.current = account.authIndex;
+    setSearch('');
+    setPage(1);
+    const nextTab = (QUOTA_TAB_ORDER as readonly string[]).includes(account.provider)
+      ? (account.provider as QuotaTabId)
+      : 'all';
+    setTab(nextTab);
+    writeQuotaUiState({ tab: nextTab });
+  }, []);
+  useEffect(() => {
+    const target = pendingJumpRef.current;
+    if (!target) return;
+    const element = document.getElementById(quotaAccountElementId(target));
+    if (!element) return;
+    pendingJumpRef.current = null;
+    element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
+
   /* ---------- 加载与操作 ---------- */
 
   const { batchLoading, loadQuota } = useQuotaBatchLoader();
@@ -261,7 +315,17 @@ export function QuotaPage() {
     if (disableControls) return;
     pendingRefreshRef.current = sessionGeneration;
     void loadFiles();
-  }, [disableControls, loadFiles, sessionGeneration]);
+    void loadRouting();
+  }, [disableControls, loadFiles, loadRouting, sessionGeneration]);
+
+  // 单卡刷新：上游的 per-card 刷新 + 服务端重拉该账号的路由快照。
+  const handleRefreshCard = useCallback(
+    (entry: QuotaFileEntry) => {
+      void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type]);
+      if (isRoutedQuotaType(entry.type)) refreshRoutingAccount(authIndexOf(entry.file));
+    },
+    [refreshQuota, refreshRoutingAccount]
+  );
 
   useEffect(() => {
     const wasLoading = prevLoadingRef.current;
@@ -334,7 +398,31 @@ export function QuotaPage() {
         onRefreshAll={handleRefreshAll}
       />
 
+      {routing.state && (
+        <BonusResetBanner
+          accounts={routing.state.accounts}
+          now={routingNow}
+          labelFor={routingLabelFor}
+          onJump={handleJumpToAccount}
+        />
+      )}
+
+      {routing.error && (
+        <div className={styles.errorBanner} role="alert">
+          {t('routing.state_error', { message: routing.error })}
+        </div>
+      )}
+
       <section className={styles.workbench}>
+        <ProviderSummaryCards
+          state={routing.state}
+          counts={summaryCounts}
+          now={routingNow}
+          classes={summaryClasses}
+          showEmails={routing.showEmails}
+          onToggleEmails={routing.setShowEmails}
+        />
+
         {/* 提供商导航与搜索工具栏分层，避免不同控件争夺视觉焦点。 */}
         <div className={styles.tabsRow} data-reveal>
           <ProviderTabs
@@ -435,7 +523,13 @@ export function QuotaPage() {
                 canRefresh={canUseActions && !entry.file.disabled}
                 resetting={resettingQuotaName === getQuotaCacheKey(entry.file)}
                 entranceDelayMs={cardEntranceDelay(index)}
-                onRefresh={() => void refreshQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
+                routing={
+                  isRoutedQuotaType(entry.type)
+                    ? routing.accountsByIndex.get(authIndexOf(entry.file) ?? '')
+                    : undefined
+                }
+                showEmails={routing.showEmails}
+                onRefresh={() => handleRefreshCard(entry)}
                 onReset={() => resetQuota(entry.file, QUOTA_ADAPTERS[entry.type])}
               />
             ))}

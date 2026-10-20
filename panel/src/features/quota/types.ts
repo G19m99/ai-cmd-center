@@ -48,7 +48,17 @@ export interface QuotaClassMap {
   quotaBarFillHigh: string;
   quotaBarFillMedium: string;
   quotaBarFillLow: string;
+  // 行布局（额度页 Claude/Codex 行：窗口横排成列）。可选：认证文件卡片宿主不提供，
+  // body 在缺失时退回纵向堆叠。
+  quotaRowMeta?: string;
+  quotaRowWindows?: string;
 }
+
+/** 可选类名：宿主提供则启用行布局，缺失不报错。 */
+export const QUOTA_OPTIONAL_CLASS_KEYS: readonly ('quotaRowMeta' | 'quotaRowWindows')[] = [
+  'quotaRowMeta',
+  'quotaRowWindows',
+];
 
 export const QUOTA_CLASS_KEYS: readonly (keyof QuotaClassMap)[] = [
   'quotaRow',
@@ -95,12 +105,20 @@ export function bindQuotaClasses(module: Record<string, string>, source: string)
   for (const key of QUOTA_CLASS_KEYS) {
     bound[key] = module[key];
   }
+  for (const key of QUOTA_OPTIONAL_CLASS_KEYS) {
+    if (module[key]) bound[key] = module[key];
+  }
   return bound;
 }
+
+/** 'stack' = 纵向堆叠（默认）；'row' = 窗口横排成列（额度页 Claude/Codex 行）。 */
+export type QuotaBodyLayout = 'stack' | 'row';
 
 export interface QuotaBodyProps<TState> {
   quota: TState;
   classes: QuotaClassMap;
+  /** Row layout needs `classes.quotaRowWindows`; without it the body stacks. */
+  layout?: QuotaBodyLayout;
   /** Host-owned chips appended to the provider's plan row (`codexPlanItem` spans). */
   planItems?: ReactNode;
   /** Host-owned content placed right after the plan row, before usage rows. */

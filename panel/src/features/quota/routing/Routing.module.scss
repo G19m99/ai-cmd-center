@@ -1,0 +1,299 @@
+@use '../../../styles/mixins' as *;
+
+/* ============================================================
+ * Routing column: status pill, session count, bonus-reset badge, the
+ * page-top bonus banner and the provider summary strip (mockup A).
+ * Colours come from the theme tokens; the pill encodes state by hue.
+ * ============================================================ */
+
+/* ---------- status pill + sessions ---------- */
+
+.statusLine {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: $radius-full;
+  font-family: $font-mono;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+
+  &[data-status='draining'] {
+    color: var(--viz-success);
+    background: color-mix(in srgb, var(--viz-success) 14%, transparent);
+  }
+
+  &[data-status='limited'] {
+    color: var(--viz-failure);
+    background: color-mix(in srgb, var(--viz-failure) 12%, transparent);
+  }
+
+  &[data-status='unknown'] {
+    color: var(--text-tertiary);
+    border: 1px dashed var(--border-color);
+    background: none;
+  }
+
+  &[data-urgent='true'] {
+    color: var(--warning-text);
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+  }
+}
+
+.sessions {
+  font-family: $font-mono;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* ---------- bonus badge on the row ---------- */
+
+.bonusBadge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 7px;
+  font-family: $font-mono;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  overflow-wrap: anywhere;
+
+  &[data-known='false'] {
+    color: var(--text-tertiary);
+    background: none;
+    border-style: dashed;
+    border-color: var(--border-color);
+  }
+}
+
+/* ---------- page-top banner ---------- */
+
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+}
+
+.bannerHead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.bannerTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--warning-text);
+}
+
+.bannerHint {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+.bannerList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bannerItem {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+  font-family: $font-mono;
+  font-size: 11.5px;
+}
+
+.bannerLink {
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text-primary) 35%, transparent);
+  text-underline-offset: 2px;
+  @include text-ellipsis;
+  max-width: 100%;
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+.bannerDetail {
+  color: var(--text-secondary);
+}
+
+/* ---------- provider summary strip ---------- */
+
+.summary {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+}
+
+.summaryCards {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  max-width: 640px;
+  min-width: 0;
+}
+
+.summaryCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  min-width: 0;
+}
+
+.summaryHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.summaryProvider {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.summaryCount {
+  font-family: $font-mono;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.summaryHeadroom {
+  font-family: $font-mono;
+  font-size: 20px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.summaryReset {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+.summaryResetLabel {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.summaryAside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.summaryStrategy {
+  font-family: $font-mono;
+  font-size: 11px;
+  color: var(--text-quaternary);
+  white-space: nowrap;
+}
+
+.toggleEmails {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-full;
+  background: none;
+  padding: 5px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition:
+    border-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out),
+    background-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out),
+    color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
+
+  &[aria-pressed='true'] {
+    color: var(--text-primary);
+    border-color: var(--border-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .toggleEmails:hover {
+    border-color: var(--border-hover);
+    background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent);
+    color: var(--text-primary);
+  }
+}
+
+@include mobile {
+  .summaryAside {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggleEmails {
+    transition: none;
+  }
+}

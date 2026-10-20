@@ -6,7 +6,10 @@
 import { useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconRefreshCw } from '@/components/ui/icons';
+import { useNow } from '@/hooks/useNow';
+import type { RoutingAccount } from '@/services/api/routingState';
 import type { ClaudeQuotaState, ResolvedTheme } from '@/types';
+import { normalizeAuthIndex } from '@/utils/authIndex';
 import { resolveQuotaErrorMessage } from '@/utils/quota';
 import { getQuotaDisplayName } from '@/utils/quota/identity';
 import {
@@ -21,6 +24,13 @@ import { isQuotaRefreshDisabled, type QuotaFileEntry } from '../logic';
 import { useClaudeResetGrants } from '../providers/claude/ClaudeResetGrants';
 import { ClaudeResetGrantDetails } from '../providers/claude/ClaudeResetGrantDetails';
 import { hasClaudeUsageData } from '../providers/claude/data';
+import { BonusResetBadge } from '../routing/BonusResetBadge';
+import { RoutingStatusPill } from '../routing/RoutingStatusPill';
+import {
+  isRoutedQuotaType,
+  maskAccountName,
+  quotaAccountElementId,
+} from '../routing/routingFormat';
 import bodyStyles from './QuotaBody.module.scss';
 import styles from './QuotaCard.module.scss';
 
@@ -35,6 +45,10 @@ export type QuotaCardProps = {
   resetting: boolean;
   /** Initial cascade delay; null disables entrance motion for later mounts. */
   entranceDelayMs?: number | null;
+  /** Routing state for this credential (Claude/Codex only); undefined when unknown. */
+  routing?: RoutingAccount;
+  /** Row layout masks the account name unless the page-level toggle is on. */
+  showEmails?: boolean;
   onRefresh: () => void;
   onReset: () => void;
 };
@@ -47,15 +61,21 @@ export function QuotaCard(props: QuotaCardProps) {
     canRefresh,
     resetting,
     entranceDelayMs,
+    routing,
+    showEmails = true,
     onRefresh,
     onReset,
   } = props;
   const { t } = useTranslation();
+  const now = useNow();
   const adapter = QUOTA_ADAPTERS[entry.type];
   const file = entry.file;
+  const rowLayout = isRoutedQuotaType(entry.type);
+  const authIndex = normalizeAuthIndex(file.auth_index ?? file.authIndex);
   const retainedClaudeUsage =
     entry.type === 'claude' && hasClaudeUsageData(quota as ClaudeQuotaState | undefined);
-  const displayName = getQuotaDisplayName(file);
+  const fullName = getQuotaDisplayName(file);
+  const displayName = rowLayout && !showEmails ? maskAccountName(fullName) : fullName;
 
   // Capture the entrance delay only at mount, without a render-time ref read.
   const [mountEntranceDelayMs] = useState<number | null>(entranceDelayMs ?? null);
@@ -110,31 +130,45 @@ export function QuotaCard(props: QuotaCardProps) {
     quota !== undefined &&
     Boolean(adapter.canResetQuota?.(quota));
 
+  const bodyLayout = rowLayout ? 'row' : 'stack';
+
   return (
     <article
-      className={`${styles.card} ${mountEntranceDelayMs === null ? '' : styles.cardEnter}`}
+      id={rowLayout && authIndex ? quotaAccountElementId(authIndex) : undefined}
+      className={`${styles.card} ${rowLayout ? styles.cardRow : ''} ${
+        mountEntranceDelayMs === null ? '' : styles.cardEnter
+      }`}
       style={entranceStyle}
+      data-routing-status={routing?.status}
     >
-      <header className={styles.head}>
-        <span
-          className={styles.iconWrap}
-          title={typeLabel}
-          style={
-            isThemeSurfaceIconProvider(providerType)
-              ? { background: getThemeSurfaceIconBackground(resolvedTheme) }
-              : undefined
-          }
-        >
-          {iconSrc ? (
-            <img src={iconSrc} alt="" className={styles.icon} />
-          ) : (
-            <span className={styles.iconFallback}>{typeLabel.slice(0, 1).toUpperCase()}</span>
-          )}
-        </span>
-        <span className={styles.fileName} title={displayName}>
-          {displayName}
-        </span>
-      </header>
+      <div className={styles.accountCell}>
+        <header className={styles.head}>
+          <span
+            className={styles.iconWrap}
+            title={typeLabel}
+            style={
+              isThemeSurfaceIconProvider(providerType)
+                ? { background: getThemeSurfaceIconBackground(resolvedTheme) }
+                : undefined
+            }
+          >
+            {iconSrc ? (
+              <img src={iconSrc} alt="" className={styles.icon} />
+            ) : (
+              <span className={styles.iconFallback}>{typeLabel.slice(0, 1).toUpperCase()}</span>
+            )}
+          </span>
+          <span className={styles.fileName} title={showEmails ? displayName : undefined}>
+            {displayName}
+          </span>
+        </header>
+        {rowLayout && routing && (
+          <div className={styles.routingCell}>
+            <RoutingStatusPill account={routing} now={now} />
+            <BonusResetBadge bonus={routing.bonus} now={now} />
+          </div>
+        )}
+      </div>
 
       <div className={styles.body}>
         {status === 'idle' ? (
@@ -165,6 +199,7 @@ export function QuotaCard(props: QuotaCardProps) {
           <adapter.Body
             quota={quota}
             classes={quotaClasses}
+            layout={bodyLayout}
             planItems={claudePlanItems}
             afterPlan={claudeAfterPlan}
           />
@@ -180,6 +215,7 @@ export function QuotaCard(props: QuotaCardProps) {
           <adapter.Body
             quota={quota}
             classes={quotaClasses}
+            layout={bodyLayout}
             planItems={claudePlanItems}
             afterPlan={claudeAfterPlan}
           />

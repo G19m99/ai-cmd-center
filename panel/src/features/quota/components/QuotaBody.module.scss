@@ -134,6 +134,25 @@
   background: var(--viz-failure);
 }
 
+/* ---------- 行布局（Claude/Codex 行：窗口横排成列）----------
+ * 可选契约键（types.ts QUOTA_OPTIONAL_CLASS_KEYS）：套餐/重置积分等元信息收进
+ * 一条紧凑区，窗口各占一列，列内沿用 .quotaRow 结构（标签 / % / 水位条 / 重置）。 */
+
+.quotaRowMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.quotaRowWindows {
+  display: grid;
+  gap: 10px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  align-items: start;
+  min-width: 0;
+}
+
 /* ---------- Antigravity 分组 ---------- */
 
 .antigravityQuotaGroup {

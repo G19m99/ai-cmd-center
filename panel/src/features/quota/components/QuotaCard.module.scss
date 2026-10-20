@@ -42,6 +42,63 @@
   }
 }
 
+/* ---------- 行布局（Claude / Codex，mockup A）----------
+ * 账号格（名称 + 路由状态 + 额外重置徽章）| body（元信息 + 窗口列）| 动作。
+ * 在网格里横跨整行；窄屏退回单列堆叠。 */
+
+.cardRow {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(200px, 1.2fr) minmax(0, 3fr) auto;
+  grid-template-areas: 'account body actions';
+  align-items: start;
+  gap: 10px 18px;
+
+  > .accountCell {
+    grid-area: account;
+  }
+
+  > .body {
+    grid-area: body;
+  }
+
+  > .actionRow {
+    grid-area: actions;
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.accountCell {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.routingCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+}
+
+@include mobile {
+  .cardRow {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'account'
+      'body'
+      'actions';
+
+    > .actionRow {
+      flex-direction: row;
+      align-items: center;
+    }
+  }
+}
+
 /* ---------- 头部：品牌图标 + 文件名 ---------- */
 
 .head {
