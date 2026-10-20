@@ -159,6 +159,20 @@ func (s *QuotaSnapshotStore) MarkFailed(authID, provider string, err error, at t
 	s.snaps[authID] = snap
 }
 
+// IDs returns the auth IDs that currently have a snapshot, in no particular order.
+func (s *QuotaSnapshotStore) IDs() []string {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ids := make([]string, 0, len(s.snaps))
+	for id := range s.snaps {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 // Delete removes the snapshot for authID.
 func (s *QuotaSnapshotStore) Delete(authID string) {
 	if s == nil {

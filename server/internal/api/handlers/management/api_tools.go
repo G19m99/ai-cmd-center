@@ -15,6 +15,7 @@ import (
 	xaiauth "github.com/router-for-me/CLIProxyAPI/v8/internal/auth/xai"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/clienterror"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/quotapoll"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/runtime/executor"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/proxyutil"
@@ -252,22 +253,11 @@ func firstNonEmptyString(values ...*string) string {
 	return ""
 }
 
+// tokenValueForAuth resolves the bearer token for an auth; the shared
+// implementation lives in internal/quotapoll so the quota poller uses the
+// same rules.
 func tokenValueForAuth(auth *coreauth.Auth) string {
-	if auth == nil {
-		return ""
-	}
-	if v := tokenValueFromMetadata(auth.Metadata); v != "" {
-		return v
-	}
-	if auth.Attributes != nil {
-		if v := strings.TrimSpace(auth.Attributes["api_key"]); v != "" {
-			return v
-		}
-		if v := strings.TrimSpace(auth.Attributes["session_token"]); v != "" {
-			return v
-		}
-	}
-	return ""
+	return quotapoll.TokenValueForAuth(auth)
 }
 
 func (h *Handler) resolveTokenForAuth(ctx context.Context, auth *coreauth.Auth, requestProxyURL string) (string, error) {
@@ -767,53 +757,7 @@ func stringValue(metadata map[string]any, key string) string {
 }
 
 func tokenValueFromMetadata(metadata map[string]any) string {
-	if len(metadata) == 0 {
-		return ""
-	}
-	if v, ok := metadata["accessToken"].(string); ok && strings.TrimSpace(v) != "" {
-		return strings.TrimSpace(v)
-	}
-	if v, ok := metadata["access_token"].(string); ok && strings.TrimSpace(v) != "" {
-		return strings.TrimSpace(v)
-	}
-	if tokenRaw, ok := metadata["token"]; ok && tokenRaw != nil {
-		switch typed := tokenRaw.(type) {
-		case string:
-			if v := strings.TrimSpace(typed); v != "" {
-				return v
-			}
-		case map[string]any:
-			if v, ok := typed["access_token"].(string); ok && strings.TrimSpace(v) != "" {
-				return strings.TrimSpace(v)
-			}
-			if v, ok := typed["accessToken"].(string); ok && strings.TrimSpace(v) != "" {
-				return strings.TrimSpace(v)
-			}
-		case map[string]string:
-			if v := strings.TrimSpace(typed["access_token"]); v != "" {
-				return v
-			}
-			if v := strings.TrimSpace(typed["accessToken"]); v != "" {
-				return v
-			}
-		}
-	}
-	if v, ok := metadata["token"].(string); ok && strings.TrimSpace(v) != "" {
-		return strings.TrimSpace(v)
-	}
-	if v, ok := metadata["id_token"].(string); ok && strings.TrimSpace(v) != "" {
-		return strings.TrimSpace(v)
-	}
-	if v, ok := metadata["api_key"].(string); ok && strings.TrimSpace(v) != "" {
-		return strings.TrimSpace(v)
-	}
-	if v, ok := metadata["session_token"].(string); ok && strings.TrimSpace(v) != "" {
-		return strings.TrimSpace(v)
-	}
-	if v, ok := metadata["cookie"].(string); ok && strings.TrimSpace(v) != "" {
-		return strings.TrimSpace(v)
-	}
-	return ""
+	return quotapoll.TokenValueFromMetadata(metadata)
 }
 
 func (h *Handler) authByIndex(authIndex string) *coreauth.Auth {

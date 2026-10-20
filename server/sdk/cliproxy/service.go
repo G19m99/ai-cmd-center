@@ -45,6 +45,11 @@ type Service struct {
 	configSequence         uint64
 	appliedRoutingState    *routingRuntimeState
 
+	// quotaPollMu guards the reset-aware quota poller lifecycle.
+	quotaPollMu     sync.Mutex
+	quotaPollCancel context.CancelFunc
+	quotaPollKey    string
+
 	// configPath is the path to the configuration file.
 	configPath string
 
