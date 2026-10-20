@@ -124,7 +124,18 @@ Run it once by hand first to check the config:
 ./ai-cmd-center -config config.yaml
 ```
 
-It should log `API server started successfully on: <tailscale-ip>:8317`. Stop it with Ctrl+C, then set up one of these. All three restart the server if it exits, which also covers a start before Tailscale has its IP.
+**Don't trust the `API server started successfully` line on its own.** The server prints it before the listener has actually bound. If the bind fails (wrong `server.host`, or Tailscale has no IP yet), it then logs `failed to start HTTP server: listen tcp ...: bind: ...` and exits. To confirm it's really up, from either machine:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer <machine key>" http://<tailscale-ip>:8317/v1/models
+```
+
+`200` means it's listening and the key works. On Windows PowerShell, use `curl.exe` and `-o NUL`. A connection error means it isn't listening.
+
+Stop it with Ctrl+C, then set up one of these. Each one restarts the server whenever it exits, which also covers a start before Tailscale has its IP:
+- Windows: a supervisor script.
+- macOS: launchd `KeepAlive`.
+- Linux: systemd `Restart=always`.
 
 ### Windows (Task Scheduler, at logon)
 
@@ -133,7 +144,23 @@ powershell -ExecutionPolicy Bypass -File deploy\windows\install-task.ps1 -Instal
 Start-ScheduledTask -TaskName 'AI Command Center'
 ```
 
-The task runs as you, 30 seconds after you log on. Remove it with `Unregister-ScheduledTask -TaskName 'AI Command Center' -Confirm:$false`.
+What the task does:
+- It runs as you, 30 seconds after you log on.
+- It runs `run-proxy.ps1` (copied into `<install-dir>`) in a hidden PowerShell window, so there's no console window to close by accident.
+- That script starts `ai-cmd-center.exe`, waits for it to exit, and starts it again after 15 seconds. Task Scheduler's own restart setting only covers a failed launch, not the program exiting, so the script does the restarting.
+
+Logs in `<install-dir>`:
+- `run-proxy.log`: one timestamped line per start and exit. Repeated `exited ... restarting` lines mean it keeps failing; check the server output.
+- `proxy.out.log`: the server's output from its latest run (bind errors appear here).
+
+Note that the task runs at **logon**, not at boot, so a user must be logged in on the host. A locked screen is fine.
+
+To stop or remove it:
+
+```powershell
+End-ScheduledTask -TaskName 'AI Command Center'; Get-Process ai-cmd-center -ErrorAction SilentlyContinue | Stop-Process
+Unregister-ScheduledTask -TaskName 'AI Command Center' -Confirm:$false    # remove
+```
 
 ### macOS (launchd)
 
@@ -247,7 +274,12 @@ The server hasn't got usage data for that account yet. It polls every `poll-inte
 The client isn't sending a key from `access.api-keys`. Check `ANTHROPIC_AUTH_TOKEN` (Claude Code) or the `env_key` variable (Codex) in the shell that started the client.
 
 **Can't connect at all**
-Check that `tailscale status` shows the host online, that `server.host` in `config.yaml` still matches `tailscale ip -4`, and that the server is running (the startup log or `journalctl`).
+Check that `tailscale status` shows the host online, that `server.host` in `config.yaml` still matches `tailscale ip -4`, and that the server is actually listening: run the `curl .../v1/models` check from section 5. For the server's output, see:
+- Windows: `run-proxy.log` and `proxy.out.log` in `<install-dir>`
+- macOS: `~/ai-cmd-center/proxy.log`
+- Linux: `journalctl -u ai-cmd-center`
+
+A `bind: ...` error means `server.host` isn't an address this machine has right now.
 
 **Changing the TTLs and urgency window**
 Edit `config.yaml` on the host:
