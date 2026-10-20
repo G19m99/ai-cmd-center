@@ -326,9 +326,11 @@ func TestPoller_FailureMarksFailedAndBacksOff(t *testing.T) {
 		t.Errorf("FetchedAt changed to %v", snap.FetchedAt)
 	}
 
-	want := testNow.Add(2 * p.interval)
+	// The first retry waits one interval, so one transient failure is retried
+	// before the snapshot goes stale.
+	want := testNow.Add(p.interval)
 	if got := p.nextAttempt("claude-1"); !got.Equal(want) {
-		t.Errorf("nextAttempt after 1 failure = %v, want %v (2x interval)", got, want)
+		t.Errorf("nextAttempt after 1 failure = %v, want %v (1x interval)", got, want)
 	}
 
 	// A sweep inside the backoff window must not hit the server again.
@@ -338,11 +340,11 @@ func TestPoller_FailureMarksFailedAndBacksOff(t *testing.T) {
 		t.Errorf("sweep during backoff made %d requests, want 0", got-before)
 	}
 
-	// Second failure doubles again; the cap is 30 minutes.
+	// Second failure doubles; the cap is 30 minutes.
 	p.now = func() time.Time { return want }
 	_ = p.Refresh(context.Background(), "claude-1")
-	if got := p.nextAttempt("claude-1"); !got.Equal(want.Add(4 * p.interval)) {
-		t.Errorf("nextAttempt after 2 failures = %v, want %v", got, want.Add(4*p.interval))
+	if got := p.nextAttempt("claude-1"); !got.Equal(want.Add(2 * p.interval)) {
+		t.Errorf("nextAttempt after 2 failures = %v, want %v (2x interval)", got, want.Add(2*p.interval))
 	}
 	for i := 0; i < 6; i++ {
 		_ = p.Refresh(context.Background(), "claude-1")
@@ -378,8 +380,8 @@ func TestPoller_NetworkErrorMarksFailed(t *testing.T) {
 	if !ok || snap.LastError == "" {
 		t.Errorf("network error should MarkFailed, got %+v (ok=%v)", snap, ok)
 	}
-	if got := p.nextAttempt("claude-1"); !got.Equal(testNow.Add(2 * p.interval)) {
-		t.Errorf("nextAttempt = %v, want %v", got, testNow.Add(2*p.interval))
+	if got := p.nextAttempt("claude-1"); !got.Equal(testNow.Add(p.interval)) {
+		t.Errorf("nextAttempt = %v, want %v (1x interval)", got, testNow.Add(p.interval))
 	}
 }
 

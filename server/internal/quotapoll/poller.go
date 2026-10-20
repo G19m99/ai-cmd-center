@@ -297,14 +297,16 @@ func (p *Poller) lockFor(authID string) *sync.Mutex {
 	return lock.(*sync.Mutex)
 }
 
-// recordFailure schedules the next attempt at min(Interval*2^n, 30m).
+// recordFailure schedules the next attempt at min(Interval<<(failures-1), 30m):
+// the first retry waits one interval, so a single transient failure is retried
+// before the snapshot goes stale (15m) and the account never shows as unknown.
 func (p *Poller) recordFailure(authID string, now time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	state := p.backoff[authID]
 	state.failures++
 	delay := p.interval
-	for i := 0; i < state.failures && delay < maxBackoff; i++ {
+	for i := 1; i < state.failures && delay < maxBackoff; i++ {
 		delay *= 2
 	}
 	if delay > maxBackoff {
