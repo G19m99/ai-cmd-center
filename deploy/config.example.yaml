@@ -1,0 +1,71 @@
+# AI Command Center configuration template.
+#
+# Based on server/config.example.yaml (the upstream v8 layout). It holds only the
+# settings this deployment cares about. Every other option keeps its upstream
+# default; see server/config.example.yaml for the full reference.
+#
+# Copy this file to config.yaml in the same folder as the binary (next to the
+# static/ folder that holds management.html), then replace every CHANGE-ME value.
+# See docs/setup.md.
+#
+# Note: on first start the server replaces the plaintext management.secret-key
+# below with its bcrypt hash and rewrites this file. Keep the plaintext somewhere
+# safe (a password manager): you type it into the dashboard login.
+config-version: 8
+
+# Listener.
+server:
+  # Bind to this machine's Tailscale IPv4 address only, never "" or 0.0.0.0.
+  # Find it with:  tailscale ip -4      (e.g. 100.x.y.z)
+  # Clients on this same machine must also use this address, not 127.0.0.1.
+  host: "<TAILSCALE_IP>"
+
+  # Server port.
+  port: 8317
+
+# Management API and dashboard (legacy name: remote-management).
+management:
+  # Needed so the dashboard and management API work over Tailscale. Reach is
+  # still limited to the tailnet by server.host above.
+  allow-remote: true
+
+  # Dashboard password / management key. Generate a long random value
+  # (see docs/setup.md, "Generate keys"). Empty disables the management API.
+  secret-key: "CHANGE-ME"
+
+  # Keep the locally built AI Command Center panel (static/management.html).
+  # Without this, the server would replace it with the upstream panel from GitHub.
+  disable-auto-update-panel: true
+
+# Client keys. One per machine, so logs show which machine sent a request.
+# Claude Code sends it as ANTHROPIC_AUTH_TOKEN, Codex through its env_key.
+access:
+  api-keys:
+    - "machine-1-CHANGE-ME"
+    - "machine-2-CHANGE-ME"
+
+# Account selection.
+routing:
+  # Send new work to the account whose weekly limit resets soonest and still has room.
+  strategy: "reset-aware"
+
+  # Keep a conversation on its account while it is active.
+  session-affinity: true
+
+  # Idle time after which a conversation is re-routed, per provider. Matches each
+  # provider's prompt-cache lifetime.
+  session-affinity-ttl-by-provider:
+    claude: 1h
+    codex: 10m
+
+  reset-aware:
+    # If the rank-1 account's weekly reset is within this window and it still has
+    # allowance left, active sessions on other accounts move to it on their next turn.
+    urgency-window: 24h
+    # How often the server polls each account's usage endpoint.
+    poll-interval: 5m
+
+# OAuth credentials created by -claude-login / -codex-login.
+oauth:
+  # Authentication directory (supports ~ for the home directory). Legacy name: top-level auth-dir.
+  auth-dir: "~/.ai-cmd-center/auths"

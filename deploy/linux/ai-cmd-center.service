@@ -1,0 +1,25 @@
+# systemd unit for AI Command Center.
+#
+# 1. Replace CHANGE-ME with the user that ran -claude-login / -codex-login
+#    (the OAuth files live under that user's auth-dir).
+#    /opt/ai-cmd-center must hold ai-cmd-center, config.yaml and static/management.html.
+# 2. sudo cp deploy/linux/ai-cmd-center.service /etc/systemd/system/
+# 3. sudo systemctl daemon-reload && sudo systemctl enable --now ai-cmd-center
+# Logs: journalctl -u ai-cmd-center -f
+[Unit]
+Description=AI Command Center (reset-aware CLIProxyAPI)
+# Bind needs the Tailscale address, so start after tailscaled.
+Wants=network-online.target tailscaled.service
+After=network-online.target tailscaled.service
+
+[Service]
+Type=simple
+User=CHANGE-ME
+WorkingDirectory=/opt/ai-cmd-center
+ExecStart=/opt/ai-cmd-center/ai-cmd-center -config /opt/ai-cmd-center/config.yaml
+# Retry if the Tailscale IP was not assigned yet and the bind failed.
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

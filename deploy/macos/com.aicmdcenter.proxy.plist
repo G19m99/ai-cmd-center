@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd agent for AI Command Center: starts at login and restarts if it exits.
+
+  1. Replace every /Users/CHANGE-ME below with your home folder (echo $HOME).
+     The folder ~/ai-cmd-center must hold ai-cmd-center, config.yaml and static/management.html.
+  2. cp deploy/macos/com.aicmdcenter.proxy.plist ~/Library/LaunchAgents/
+  3. launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.aicmdcenter.proxy.plist
+  Stop/remove: launchctl bootout gui/$(id -u)/com.aicmdcenter.proxy
+  Logs: ~/ai-cmd-center/proxy.log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.aicmdcenter.proxy</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/CHANGE-ME/ai-cmd-center/ai-cmd-center</string>
+    <string>-config</string>
+    <string>/Users/CHANGE-ME/ai-cmd-center/config.yaml</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/CHANGE-ME/ai-cmd-center</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- Restart if it exits, e.g. when the Tailscale IP was not up yet and the bind failed. -->
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/CHANGE-ME/ai-cmd-center/proxy.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/CHANGE-ME/ai-cmd-center/proxy.log</string>
+</dict>
+</plist>

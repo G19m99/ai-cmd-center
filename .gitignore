@@ -1,1 +1,4 @@
 .superpowers/
+
+# Build output (scripts/build.ps1, scripts/build.sh)
+/dist/

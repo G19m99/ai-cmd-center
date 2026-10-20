@@ -1,0 +1,4 @@
+# Keep Unix files LF even with core.autocrlf=true on Windows.
+*.sh eol=lf
+*.service eol=lf
+*.plist eol=lf
