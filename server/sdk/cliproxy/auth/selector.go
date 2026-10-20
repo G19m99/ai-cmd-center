@@ -85,6 +85,14 @@ type modelCooldownError struct {
 	resetIn  time.Duration
 	provider string
 	cause    error
+	// freeAt, account and window are set by the reset-aware all-limited path.
+	// A zero freeAt means the time is derived from now + resetIn.
+	freeAt  time.Time
+	account string
+	window  string
+	// now pins the clock used to render the message; zero means cooldownNow().
+	// The friendly message itself lives in resetaware_selector.go.
+	now time.Time
 }
 
 // NewModelCooldownError creates an error representing model-level cooldown.
@@ -127,6 +135,9 @@ func (e *modelCooldownError) Error() string {
 	message := fmt.Sprintf("All credentials for model %s are cooling down", modelName)
 	if e.provider != "" {
 		message = fmt.Sprintf("%s via provider %s", message, e.provider)
+	}
+	if friendly := e.friendlyMessage(); friendly != "" {
+		message = friendly
 	}
 	resetSeconds := int(math.Ceil(e.resetIn.Seconds()))
 	if resetSeconds < 0 {
