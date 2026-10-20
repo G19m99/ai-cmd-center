@@ -89,6 +89,24 @@ func TestSessionCache_CountByAuth(t *testing.T) {
 		t.Fatalf("CountByAuth() = %v, want {A:2 B:1}", got)
 	}
 
+	// One conversation calling a second model (Claude Code also calling haiku)
+	// is still one session: the model suffix of the cache key is ignored.
+	cache.Set("claude::sess-3::haiku", "B")
+	cache.Set("claude::sess-2::haiku", "A")
+	got = cache.CountByAuth()
+	if got["A"] != 2 || got["B"] != 1 || len(got) != 2 {
+		t.Fatalf("CountByAuth() with a second model per session = %v, want {A:2 B:1}", got)
+	}
+
+	// A conversation bound to a different auth for another model counts for
+	// each auth it is bound to.
+	cache.Set("claude::sess-3::opus", "A")
+	got = cache.CountByAuth()
+	if got["A"] != 3 || got["B"] != 1 {
+		t.Fatalf("CountByAuth() with a session split across auths = %v, want {A:3 B:1}", got)
+	}
+	cache.Set("claude::sess-3::opus", "B")
+
 	// Expired groups are not counted.
 	cache.Set("claude::sess-4::m", "C")
 	shiftSessionCacheExpiry(cache, 2*time.Hour)
@@ -330,5 +348,34 @@ func TestAffinity_OtherFallbacksKeepHighestTierOnly(t *testing.T) {
 		t.Fatal("Fallback() = nil")
 	} else if _, ok := fallback.(lastAuthSelector); !ok {
 		t.Fatalf("Fallback() = %T, want lastAuthSelector", fallback)
+	}
+}
+
+func TestSessionCache_CountByAuth_SameSessionTwoModels(t *testing.T) {
+	t.Parallel()
+
+	cache := NewSessionCache(time.Hour)
+	defer cache.Stop()
+
+	cache.Set("claude::sess-1::claude-sonnet-5-5", "A")
+	cache.Set("claude::sess-1::claude-haiku-4-5", "A")
+
+	if got := cache.CountByAuth(); got["A"] != 1 || len(got) != 1 {
+		t.Fatalf("CountByAuth() same session on two models = %v, want {A:1}", got)
+	}
+
+	// Keys without a model segment count as their own conversation.
+	cache.Set("claude::sess-2", "A")
+	if got := cache.CountByAuth(); got["A"] != 2 {
+		t.Fatalf("CountByAuth() with a model-less key = %v, want {A:2}", got)
+	}
+	for key, want := range map[string]string{
+		"claude::sess-1::claude-sonnet-5-5": "claude::sess-1",
+		"claude::sess-2":                    "claude::sess-2",
+		"sess-3":                            "sess-3",
+	} {
+		if got := sessionConversationKey(key); got != want {
+			t.Fatalf("sessionConversationKey(%q) = %q, want %q", key, got, want)
+		}
 	}
 }
