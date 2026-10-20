@@ -143,10 +143,14 @@ func NewResetAwareSelector(cfg ResetAwareConfig) *ResetAwareSelector {
 // filtered by upstream for cooldowns and availability. When no candidate is
 // usable it returns an all-limited *modelCooldownError (429) naming the
 // account that frees earliest.
+//
+// Availability is checked across every priority tier: a lower-priority
+// account must still be picked while every higher-priority one is
+// snapshot-limited. Priority is applied as a tie-break inside the ranking.
 func (s *ResetAwareSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*Auth) (*Auth, error) {
 	_ = opts
 	now := s.now()
-	available, err := getSelectorAvailableAuths(ctx, auths, provider, model, now)
+	available, err := getSelectorAvailableAuthsAcrossPriorities(ctx, auths, provider, model, now)
 	if err != nil {
 		return nil, err
 	}

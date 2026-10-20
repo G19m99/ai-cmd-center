@@ -302,6 +302,37 @@ func TestRank_TieBreaksHeadroomThenPriorityThenID(t *testing.T) {
 	}
 }
 
+func TestPick_LimitedHighPriorityFallsThroughToLowerTier(t *testing.T) {
+	now := time.Date(2026, 10, 20, 15, 0, 0, 0, time.Local)
+	f := newResetAwareFixture(t, now)
+	f.put("claude-high", "claude",
+		fiveHourWindow(100, now.Add(2*time.Hour)),
+		sevenDayWindow(60, now.Add(24*time.Hour)))
+	f.put("claude-low", "claude",
+		fiveHourWindow(10, now.Add(3*time.Hour)),
+		sevenDayWindow(10, now.Add(4*24*time.Hour)))
+	high := claudeAuth("claude-high")
+	high.Attributes = map[string]string{"priority": "5"}
+	low := claudeAuth("claude-low")
+	auths := []*Auth{high, low}
+
+	picked, err := f.selector.Pick(context.Background(), "claude", "claude-sonnet-5-5", cliproxyexecutor.Options{}, auths)
+	if err != nil {
+		t.Fatalf("Pick() error = %v, want the lower-priority usable account", err)
+	}
+	if picked.ID != "claude-low" {
+		t.Fatalf("Pick() = %q, want claude-low", picked.ID)
+	}
+
+	// Once the high-priority account frees, priority breaks the tie only among
+	// accounts with equal weekly keys; here the sooner weekly reset still wins.
+	f.now = now.Add(2*time.Hour + time.Minute)
+	picked, err = f.selector.Pick(context.Background(), "claude", "claude-sonnet-5-5", cliproxyexecutor.Options{}, auths)
+	if err != nil || picked.ID != "claude-high" {
+		t.Fatalf("Pick() after reset = %v, %v; want claude-high", picked, err)
+	}
+}
+
 func TestUrgent_WithinWindowWithHeadroom(t *testing.T) {
 	now := time.Date(2026, 10, 20, 15, 0, 0, 0, time.Local)
 	f := newResetAwareFixture(t, now)
