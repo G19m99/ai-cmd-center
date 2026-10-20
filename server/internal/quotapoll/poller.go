@@ -272,6 +272,11 @@ func (p *Poller) refreshAuth(ctx context.Context, auth *coreauth.Auth) error {
 	}
 	now := p.now()
 	if err != nil {
+		if ctx.Err() != nil {
+			// The poller was stopped or restarted mid-fetch; that says nothing
+			// about the provider, so neither the snapshot nor the backoff changes.
+			return err
+		}
 		p.store.MarkFailed(auth.ID, provider, err, now)
 		p.recordFailure(auth.ID, now)
 		return err

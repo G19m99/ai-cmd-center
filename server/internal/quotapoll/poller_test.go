@@ -383,6 +383,38 @@ func TestPoller_NetworkErrorMarksFailed(t *testing.T) {
 	}
 }
 
+func TestPoller_CancelledContextIsNotAFailure(t *testing.T) {
+	ts := newTestServer(t)
+	started := make(chan struct{}, 1)
+	ts.claude = func(w http.ResponseWriter, r *http.Request) {
+		started <- struct{}{}
+		<-r.Context().Done() // block until the client gives up
+	}
+	manager := newManager(t, newAuth("claude-1", "claude", map[string]any{"access_token": testClaudeToken}))
+	p, store := newTestPoller(t, ts, manager)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- p.Refresh(ctx, "claude-1") }()
+	<-started
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Fatal("Refresh should return the cancellation error")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Refresh did not return after cancel")
+	}
+	if snap, ok := store.Get("claude-1"); ok && snap.LastError != "" {
+		t.Errorf("cancellation must not MarkFailed, got LastError %q", snap.LastError)
+	}
+	if got := p.nextAttempt("claude-1"); !got.IsZero() {
+		t.Errorf("cancellation must not record backoff, got nextAttempt %v", got)
+	}
+}
+
 func TestPoller_NeverCallsRedeem(t *testing.T) {
 	ts := newTestServer(t)
 	manager := newManager(t,

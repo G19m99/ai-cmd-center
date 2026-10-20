@@ -151,3 +151,26 @@ func TestQuotaPollClientFactory(t *testing.T) {
 		t.Fatal("per-auth proxy should produce a transport")
 	}
 }
+
+func TestQuotaPollClientFactory_CachesByEffectiveProxy(t *testing.T) {
+	factory := quotaPollClientFactory("http://127.0.0.1:9")
+	direct := factory(&coreauth.Auth{ID: "a"})
+	if factory(&coreauth.Auth{ID: "b"}) != direct {
+		t.Fatal("auths sharing the global proxy should share one client")
+	}
+	if factory(nil) != direct {
+		t.Fatal("nil auth should fall back to the global proxy client")
+	}
+	perAuth := factory(&coreauth.Auth{ID: "c", ProxyURL: "socks5://127.0.0.1:9"})
+	if perAuth == direct {
+		t.Fatal("a per-auth proxy should get its own client")
+	}
+	if factory(&coreauth.Auth{ID: "d", ProxyURL: " socks5://127.0.0.1:9 "}) != perAuth {
+		t.Fatal("the same per-auth proxy should reuse the cached client")
+	}
+
+	plain := quotaPollClientFactory("")
+	if plain(&coreauth.Auth{ID: "a"}) != plain(&coreauth.Auth{ID: "b"}) {
+		t.Fatal("direct clients should be shared")
+	}
+}

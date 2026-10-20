@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/quotapoll"
@@ -95,37 +96,59 @@ func (s *Service) stopQuotaPollerLocked() {
 
 // quotaPollClientFactory mirrors the management APICall proxy order: the
 // auth's own proxy-url, then the global proxy-url, else a direct connection.
-// Per-API-key proxy entries from config are not consulted.
+// Per-API-key proxy entries from config are not consulted. Clients are
+// cached by effective proxy so transports and their keep-alive pools are
+// reused across fetches instead of rebuilt every time.
 func quotaPollClientFactory(globalProxy string) func(*coreauth.Auth) *http.Client {
+	globalProxy = strings.TrimSpace(globalProxy)
+	var mu sync.Mutex
+	clients := make(map[string]*http.Client)
 	return func(auth *coreauth.Auth) *http.Client {
-		client := &http.Client{Timeout: 20 * time.Second}
-		candidates := make([]string, 0, 2)
+		proxyStr := globalProxy
 		if auth != nil {
-			if proxyStr := strings.TrimSpace(auth.ProxyURL); proxyStr != "" {
-				candidates = append(candidates, proxyStr)
+			if own := strings.TrimSpace(auth.ProxyURL); own != "" {
+				proxyStr = own
 			}
 		}
-		if globalProxy != "" {
-			candidates = append(candidates, globalProxy)
+		mu.Lock()
+		defer mu.Unlock()
+		if client, ok := clients[proxyStr]; ok {
+			return client
 		}
-		for _, proxyStr := range candidates {
-			transport, _, errBuild := proxyutil.BuildHTTPTransport(proxyStr)
-			if errBuild != nil {
-				log.WithError(errBuild).Debug("quota poller: build proxy transport failed")
-				continue
-			}
-			if transport != nil {
-				client.Transport = transport
-				return client
-			}
-		}
-		if base, ok := http.DefaultTransport.(*http.Transport); ok && base != nil {
-			direct := base.Clone()
-			direct.Proxy = nil
-			client.Transport = direct
-		}
+		client := newQuotaPollClient(proxyStr, globalProxy)
+		clients[proxyStr] = client
 		return client
 	}
+}
+
+// newQuotaPollClient builds the client for one effective proxy, falling back
+// to the global proxy when a per-auth value does not parse, then to direct.
+func newQuotaPollClient(proxyStr, globalProxy string) *http.Client {
+	client := &http.Client{Timeout: 20 * time.Second}
+	candidates := []string{proxyStr}
+	if globalProxy != "" && globalProxy != proxyStr {
+		candidates = append(candidates, globalProxy)
+	}
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		transport, _, errBuild := proxyutil.BuildHTTPTransport(candidate)
+		if errBuild != nil {
+			log.WithError(errBuild).Debug("quota poller: build proxy transport failed")
+			continue
+		}
+		if transport != nil {
+			client.Transport = transport
+			return client
+		}
+	}
+	if base, ok := http.DefaultTransport.(*http.Transport); ok && base != nil {
+		direct := base.Clone()
+		direct.Proxy = nil
+		client.Transport = direct
+	}
+	return client
 }
 
 // quotaRefreshHook asks the running poller to re-fetch an account right after
