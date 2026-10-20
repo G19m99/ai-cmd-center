@@ -8,8 +8,13 @@
  * after the card's own "Refresh quota".
  *
  * Stale guards: every request captures the client's connection revision and a
- * request id; results from an older connection or a superseded request are
- * dropped, matching the quota cache's generation guard.
+ * per-kind request id (the 30s poll GET and the row-refresh POST count
+ * separately, so a poll that starts during a 45s refresh cannot discard the
+ * refresh's fresh result); results from an older connection or a superseded
+ * request of the same kind are dropped, matching the quota cache's generation
+ * guard. On top of that a response whose `generated_at` is older than the
+ * state already shown is dropped, so the two kinds can never roll each other
+ * back.
  */
 
 import { useCallback, useEffect, useMemo } from 'react';
@@ -61,13 +66,34 @@ interface RoutingStateStore {
   reset: () => void;
 }
 
-let requestSeq = 0;
+type RequestKind = 'poll' | 'refresh';
 
-export const useRoutingStateStore = create<RoutingStateStore>((set) => {
-  const begin = () => {
-    const id = ++requestSeq;
+const requestSeq: Record<RequestKind, number> = { poll: 0, refresh: 0 };
+
+const parseGeneratedAt = (state: RoutingState | null): number | null => {
+  if (!state?.generatedAt) return null;
+  const ms = Date.parse(state.generatedAt);
+  return Number.isFinite(ms) ? ms : null;
+};
+
+/**
+ * True when `next` was generated before the state already shown and must not
+ * replace it. States without a usable `generatedAt` on either side always apply.
+ */
+export const isOlderRoutingState = (
+  next: RoutingState,
+  current: RoutingState | null
+): boolean => {
+  const nextMs = parseGeneratedAt(next);
+  const currentMs = parseGeneratedAt(current);
+  return nextMs !== null && currentMs !== null && nextMs < currentMs;
+};
+
+export const useRoutingStateStore = create<RoutingStateStore>((set, get) => {
+  const begin = (kind: RequestKind) => {
+    const id = ++requestSeq[kind];
     const revision = apiClient.getConnectionRevision();
-    return () => id === requestSeq && revision === apiClient.getConnectionRevision();
+    return () => id === requestSeq[kind] && revision === apiClient.getConnectionRevision();
   };
 
   const commit = (
@@ -89,6 +115,11 @@ export const useRoutingStateStore = create<RoutingStateStore>((set) => {
           } else {
             set({ loading: false });
           }
+          return;
+        }
+        if (isOlderRoutingState(next, get().state)) {
+          // A poll answered from before a refresh landed: keep the fresher state.
+          set({ loading: false, error: '' });
           return;
         }
         set({ state: next, supported: true, loading: false, error: '' });
@@ -113,10 +144,10 @@ export const useRoutingStateStore = create<RoutingStateStore>((set) => {
       writeShowEmails(value);
       set({ showEmails: value });
     },
-    load: () => commit(begin(), fetchRoutingState),
+    load: () => commit(begin('poll'), fetchRoutingState),
     refreshAccount: (authIndex) =>
       commit(
-        begin(),
+        begin('refresh'),
         () => refreshRoutingState(authIndex),
         // 409: poller not running (strategy is not reset-aware). Not actionable here.
         (error) => (error as ApiError | undefined)?.status === 409,
@@ -124,13 +155,14 @@ export const useRoutingStateStore = create<RoutingStateStore>((set) => {
       ),
     refreshAll: () =>
       commit(
-        begin(),
+        begin('refresh'),
         () => refreshRoutingState(),
         (error) => (error as ApiError | undefined)?.status === 409,
         false
       ),
     reset: () => {
-      requestSeq += 1;
+      requestSeq.poll += 1;
+      requestSeq.refresh += 1;
       set({ state: null, supported: true, loading: false, error: '' });
     },
   };
