@@ -1,0 +1,90 @@
+<h2>Quota dashboard: which layout fits how you'd use it?</h2>
+<p class="subtitle">Both show the same data (your 2 Claude + 1 Codex accounts). The difference is what's front and center: the quota numbers, or where traffic is going right now and why.</p>
+
+<style>
+  .mk { background:#141414; color:#e8e8e8; font-family:ui-sans-serif,system-ui; font-size:13px; padding:16px; border-radius:8px; }
+  .mk .muted { color:#8a8a8a; }
+  .mk .mono { font-family:ui-monospace,Consolas,monospace; }
+  .mk .row { display:grid; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid #262626; }
+  .mk .bar { height:6px; background:#2a2a2a; border-radius:3px; overflow:hidden; margin:4px 0; }
+  .mk .bar > i { display:block; height:100%; }
+  .mk .g { background:#2fbf71; } .mk .y { background:#e2b93b; } .mk .r { background:#e5534b; }
+  .mk .pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; }
+  .mk .drain { background:#1f3a2a; color:#5fe39a; }
+  .mk .standby { background:#2a2a2a; color:#aaa; }
+  .mk .limited { background:#3a1f1f; color:#ff8a80; }
+  .mk h4 { margin:14px 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:#8a8a8a; }
+  .mk .lane { background:#1b1b1b; border:1px solid #2a2a2a; border-radius:8px; padding:12px; margin-bottom:10px; }
+  .mk .lane.active { border-color:#2fbf71; }
+  .mk .sess { display:inline-block; background:#232323; border:1px solid #333; border-radius:6px; padding:3px 7px; margin:3px 4px 0 0; font-size:11px; }
+  .mk .arrow { color:#555; text-align:center; margin:2px 0 8px; font-size:11px; }
+</style>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Theo-style quota table + a routing column</h3>
+      <p>Like his screen: one row per account showing each limit with a bar and its reset time. Added: a status pill (Draining / Standby / Limited), the number of sessions pinned to the account, and its place in line.</p>
+      <div class="mk">
+        <div class="muted" style="margin-bottom:8px">Quota Management · 3 credentials</div>
+        <h4>Claude · 2</h4>
+        <div class="row" style="grid-template-columns:1.4fr 1fr 1fr 1fr 1fr">
+          <div><div class="mono">claude-a@•••.json</div><span class="pill drain">● Draining · #1</span> <span class="muted">3 sessions</span></div>
+          <div>7-day <b style="float:right">38% left</b><div class="bar"><i class="y" style="width:38%"></i></div><span class="muted">in 1 day · 10/21 13:00</span></div>
+          <div>5-hour <b style="float:right">72%</b><div class="bar"><i class="g" style="width:72%"></i></div><span class="muted">in 2h</span></div>
+          <div>7-day Opus <b style="float:right">55%</b><div class="bar"><i class="g" style="width:55%"></i></div><span class="muted">in 1 day</span></div>
+          <div class="muted">↻ refresh</div>
+        </div>
+        <div class="row" style="grid-template-columns:1.4fr 1fr 1fr 1fr 1fr">
+          <div><div class="mono">claude-b@•••.json</div><span class="pill standby">Standby · #2</span> <span class="muted">1 session</span></div>
+          <div>7-day <b style="float:right">91% left</b><div class="bar"><i class="g" style="width:91%"></i></div><span class="muted">in 4 days · 10/24 22:00</span></div>
+          <div>5-hour <b style="float:right">100%</b><div class="bar"><i class="g" style="width:100%"></i></div><span class="muted">no reset pending</span></div>
+          <div>7-day Opus <b style="float:right">95%</b><div class="bar"><i class="g" style="width:95%"></i></div><span class="muted">in 4 days</span></div>
+          <div class="muted">↻ refresh</div>
+        </div>
+        <h4>Codex · 1</h4>
+        <div class="row" style="grid-template-columns:1.4fr 1fr 1fr 1fr 1fr">
+          <div><div class="mono">codex@•••.json</div><span class="pill drain">● Draining · #1</span> <span class="muted">1 session</span></div>
+          <div>Weekly <b style="float:right">64% left</b><div class="bar"><i class="g" style="width:64%"></i></div><span class="muted">in 3 days · 10/23 18:23</span></div>
+          <div>5-hour <b style="float:right">88%</b><div class="bar"><i class="g" style="width:88%"></i></div><span class="muted">in 4h</span></div>
+          <div></div><div class="muted">↻ refresh</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Routing-first "drain queue"</h3>
+      <p>Each provider is a lane of accounts in the order they'll be used up (soonest reset first). Live sessions show as chips on the account they're pinned to, with how long they've been idle. Quota bars are smaller, inside each card.</p>
+      <div class="mk">
+        <h4>Claude: drain order</h4>
+        <div class="lane active">
+          <span class="pill drain">● Draining now</span> <span class="mono">claude-a</span> <span class="muted" style="float:right">resets in 1 day · 10/21 13:00</span>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+            <div>7-day · 38% left<div class="bar"><i class="y" style="width:38%"></i></div></div>
+            <div>5-hour · 72% left<div class="bar"><i class="g" style="width:72%"></i></div></div>
+          </div>
+          <div class="muted" style="margin-top:6px">~ on pace to use 100% before reset</div>
+          <div><span class="sess">laptop · ai-cmd-center · active 12s</span><span class="sess">laptop · webapp · idle 2m</span><span class="sess">desktop · api · active 40s</span></div>
+        </div>
+        <div class="arrow">then ↓</div>
+        <div class="lane">
+          <span class="pill standby">Standby</span> <span class="mono">claude-b</span> <span class="muted" style="float:right">resets in 4 days · 10/24 22:00</span>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+            <div>7-day · 91% left<div class="bar"><i class="g" style="width:91%"></i></div></div>
+            <div>5-hour · 100% left<div class="bar"><i class="g" style="width:100%"></i></div></div>
+          </div>
+          <div><span class="sess">desktop · infra · active 5s · <i>stays: pinned while active</i></span></div>
+        </div>
+        <h4>Codex: drain order</h4>
+        <div class="lane active">
+          <span class="pill drain">● Draining now</span> <span class="mono">codex</span> <span class="muted" style="float:right">resets in 3 days</span>
+          <div style="margin-top:8px">Weekly · 64% left<div class="bar"><i class="g" style="width:64%"></i></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
