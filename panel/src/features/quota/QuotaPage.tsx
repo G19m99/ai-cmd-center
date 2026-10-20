@@ -30,7 +30,12 @@ import { QuotaCard } from './components/QuotaCard';
 import { QuotaTimeline } from './components/QuotaTimeline';
 import { BonusResetBanner } from './routing/BonusResetBanner';
 import { ProviderSummaryCards } from './routing/ProviderSummaryCards';
-import { isRoutedQuotaType, maskAccountName, quotaAccountElementId } from './routing/routingFormat';
+import {
+  accountDisplayName,
+  isRoutedQuotaType,
+  maskAccountName,
+  quotaAccountElementId,
+} from './routing/routingFormat';
 import { useRoutingState } from './routing/useRoutingState';
 import { bindQuotaClasses } from './types';
 import bodyStyles from './components/QuotaBody.module.scss';
@@ -67,12 +72,6 @@ const summaryClasses = bindQuotaClasses(bodyStyles, 'QuotaBody.module.scss');
 
 const authIndexOf = (file: AuthFileItem): string | null =>
   normalizeAuthIndex(file.auth_index ?? file.authIndex);
-
-/**
- * Existing providers display filenames; Devin's card and timeline share an
- * identity-aware display label. Keep the filename fallback stable for memoization.
- */
-const displayNameFor = (name: string) => name;
 
 export function QuotaPage() {
   const { t } = useTranslation();
@@ -270,10 +269,20 @@ export function QuotaPage() {
   const routingLabelFor = useCallback(
     (account: RoutingAccount) => {
       const match = entries.find((entry) => authIndexOf(entry.file) === account.authIndex);
-      const name = match ? match.file.name : account.label;
-      return routing.showEmails ? name : maskAccountName(name);
+      if (match) return accountDisplayName(match.file, match.type, routing.showEmails);
+      return routing.showEmails ? account.label : maskAccountName(account.label);
     },
     [entries, routing.showEmails]
+  );
+  // The timeline names lanes by file name (Devin resolves its own identity
+  // label); mask Claude/Codex lanes exactly like their cards.
+  const routedNames = useMemo(
+    () => new Set(entries.filter((entry) => isRoutedQuotaType(entry.type)).map((e) => e.file.name)),
+    [entries]
+  );
+  const displayNameFor = useCallback(
+    (name: string) => (routedNames.has(name) && !routing.showEmails ? maskAccountName(name) : name),
+    [routedNames, routing.showEmails]
   );
   const summaryCounts = useMemo(
     () => ({ claude: tabCounts.claude ?? 0, codex: tabCounts.codex ?? 0 }),

@@ -4,7 +4,9 @@
  */
 
 import type { RoutingBonus } from '@/services/api/routingState';
+import type { AuthFileItem } from '@/types';
 import { parseIsoToMs } from '@/utils/quota';
+import { getQuotaDisplayName } from '@/utils/quota/identity';
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@/utils/time/durations';
 import type { QuotaProviderType } from '../providers/types';
 
@@ -100,6 +102,19 @@ export function maskAccountName(name: string): string {
   const extension = dot > 0 ? name.slice(dot) : '';
   if (stem.length <= 2) return name;
   return `${stem.slice(0, 2)}${MASK}${extension}`;
+}
+
+/**
+ * The one name every surface (card, banner, timeline) shows for a credential:
+ * upstream's display name, masked for Claude/Codex while emails are hidden.
+ */
+export function accountDisplayName(
+  file: AuthFileItem,
+  type: QuotaProviderType,
+  showEmails: boolean
+): string {
+  const full = getQuotaDisplayName(file);
+  return isRoutedQuotaType(type) && !showEmails ? maskAccountName(full) : full;
 }
 
 /**

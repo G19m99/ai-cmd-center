@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import {
+  accountDisplayName,
   formatCompactDuration,
   maskAccountName,
   windowLabel,
@@ -36,5 +38,33 @@ describe('windowLabel', () => {
     const t = (key: string) => (key === 'routing.window_seven_day' ? '7-day' : key);
     expect(windowLabel(t, 'seven_day')).toBe('7-day');
     expect(windowLabel(t, 'custom')).toBe('custom');
+  });
+});
+
+describe('accountDisplayName', () => {
+  const file = { name: 'claude-alice@example.com.json' };
+
+  test('masks Claude/Codex names while emails are hidden', () => {
+    expect(accountDisplayName(file, 'claude', false)).toBe('c•••@example.com.json');
+    expect(accountDisplayName({ name: 'codex-work.json' }, 'codex', false)).toBe('co•••.json');
+  });
+
+  test('shows the full name when emails are shown, and never masks other providers', () => {
+    expect(accountDisplayName(file, 'claude', true)).toBe('claude-alice@example.com.json');
+    expect(accountDisplayName(file, 'kimi', false)).toBe('claude-alice@example.com.json');
+  });
+});
+
+describe('masking covers every surface that names an account', () => {
+  const read = (path: string) =>
+    readFileSync(new URL(`../../../../${path}`, import.meta.url), 'utf8');
+
+  test('card, banner label and timeline all derive from showEmails', () => {
+    const page = read('src/features/quota/QuotaPage.tsx');
+    expect(page).not.toContain('const displayNameFor = (name: string) => name;');
+    expect(page).toMatch(/const displayNameFor = useCallback\([\s\S]*?maskAccountName\(name\)/);
+    expect(page).toMatch(/routingLabelFor = useCallback\([\s\S]*?accountDisplayName\(/);
+    const card = read('src/features/quota/components/QuotaCard.tsx');
+    expect(card).toContain('accountDisplayName(file, entry.type, showEmails)');
   });
 });

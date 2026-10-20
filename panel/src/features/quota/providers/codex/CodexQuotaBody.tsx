@@ -6,15 +6,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CodexQuotaState } from '@/types';
-import {
-  normalizePlanType,
-  resolvePlanTier,
-  PREMIUM_CODEX_PLAN_TYPES,
-  buildResetDisplay,
-  formatInstantShort,
-  parseIsoToMs,
-  resolveResetMs,
-} from '@/utils/quota';
+import { buildResetDisplay, formatInstantShort, parseIsoToMs, resolveResetMs } from '@/utils/quota';
 import { resolveTimeZoneLabel } from '@/utils/time/timezone';
 import { formatDateTimeValue } from '@/utils/format';
 import { useNow } from '@/hooks/useNow';
@@ -22,15 +14,8 @@ import { QuotaBodyGroup } from '../../components/QuotaBodyGroup';
 import { QuotaMeter } from '../../components/QuotaMeter';
 import { QuotaResetLabel } from '../../components/QuotaResetLabel';
 import { collectQuotaRowInstants, pickUrgentRowId, resetCreditRowId } from '../../resetSchedule';
-import type { QuotaBodyProps, QuotaClassMap } from '../../types';
-
-const getPlanValueClass = (planType: string | null, classes: QuotaClassMap): string => {
-  // elite/premium 顺序契约由 resolvePlanTier 承载（tests/quotaPlanTier.test.ts 守护）。
-  const tier = resolvePlanTier(planType);
-  if (tier === 'elite') return classes.elitePlanValue;
-  if (tier === 'premium') return classes.premiumPlanValue;
-  return classes.codexPlanValue;
-};
+import { resolveCodexPlanLabel, resolveCodexPlanValueClass } from '../../routing/accountPlan';
+import type { QuotaBodyProps } from '../../types';
 
 export function CodexQuotaBody({
   quota,
@@ -58,24 +43,10 @@ export function CodexQuotaBody({
   const rateLimitResetCredits = quota.rateLimitResetCredits ?? [];
   const rateLimitResetCreditsError = quota.rateLimitResetCreditsError ?? '';
 
-  const getPlanLabel = (pt?: string | null): string | null => {
-    const normalized = normalizePlanType(pt);
-    if (!normalized) return null;
-    if (normalized === 'self_serve_business_prolite') {
-      return t('codex_quota.plan_business_premium');
-    }
-    if (normalized === 'pro') return t('codex_quota.plan_pro');
-    if (PREMIUM_CODEX_PLAN_TYPES.has(normalized) && normalized !== 'pro') {
-      return t('codex_quota.plan_prolite');
-    }
-    if (normalized === 'plus') return t('codex_quota.plan_plus');
-    if (normalized === 'team') return t('codex_quota.plan_team');
-    if (normalized === 'free') return t('codex_quota.plan_free');
-    return pt || normalized;
-  };
-
-  const planLabel = getPlanLabel(planType);
-  const planValueClass = getPlanValueClass(planType, classes);
+  const planLabel = resolveCodexPlanLabel(t, planType);
+  const planValueClass = resolveCodexPlanValueClass(planType, classes);
+  // In row layout the card's account cell shows the plan, so the chip is skipped here.
+  const showPlan = Boolean(planLabel) && !rowLayout;
 
   // Renewal was the one date on this card in a different shape (a full
   // toLocaleString). Reformatted from the instant so it reads like the rest,
@@ -91,7 +62,7 @@ export function CodexQuotaBody({
     : null;
 
   const hasPlanRow = Boolean(
-    planLabel ||
+    showPlan ||
     expiryDisplay ||
     creditsUnlimited ||
     creditBalance !== null ||
@@ -105,7 +76,7 @@ export function CodexQuotaBody({
       <QuotaBodyGroup className={rowLayout && hasMeta ? classes.quotaRowMeta : undefined}>
         {hasPlanRow && (
           <div className={classes.codexPlan}>
-            {planLabel && (
+            {showPlan && (
               <span className={classes.codexPlanItem}>
                 <span className={classes.codexPlanLabel}>{t('codex_quota.plan_label')}</span>
                 <span className={planValueClass}>{planLabel}</span>

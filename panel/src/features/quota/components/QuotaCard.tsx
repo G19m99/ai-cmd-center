@@ -11,7 +11,6 @@ import type { RoutingAccount } from '@/services/api/routingState';
 import type { ClaudeQuotaState, ResolvedTheme } from '@/types';
 import { normalizeAuthIndex } from '@/utils/authIndex';
 import { resolveQuotaErrorMessage } from '@/utils/quota';
-import { getQuotaDisplayName } from '@/utils/quota/identity';
 import {
   getAuthFileIcon,
   getThemeSurfaceIconBackground,
@@ -26,9 +25,10 @@ import { ClaudeResetGrantDetails } from '../providers/claude/ClaudeResetGrantDet
 import { hasClaudeUsageData } from '../providers/claude/data';
 import { BonusResetBadge } from '../routing/BonusResetBadge';
 import { RoutingStatusPill } from '../routing/RoutingStatusPill';
+import { resolveAccountPlan } from '../routing/accountPlan';
 import {
+  accountDisplayName,
   isRoutedQuotaType,
-  maskAccountName,
   quotaAccountElementId,
 } from '../routing/routingFormat';
 import bodyStyles from './QuotaBody.module.scss';
@@ -74,8 +74,9 @@ export function QuotaCard(props: QuotaCardProps) {
   const authIndex = normalizeAuthIndex(file.auth_index ?? file.authIndex);
   const retainedClaudeUsage =
     entry.type === 'claude' && hasClaudeUsageData(quota as ClaudeQuotaState | undefined);
-  const fullName = getQuotaDisplayName(file);
-  const displayName = rowLayout && !showEmails ? maskAccountName(fullName) : fullName;
+  const displayName = accountDisplayName(file, entry.type, showEmails);
+  // Row layout: the plan sits under the name; the body skips its own plan chip.
+  const accountPlan = rowLayout ? resolveAccountPlan(t, entry.type, quota, quotaClasses) : null;
 
   // Capture the entrance delay only at mount, without a render-time ref read.
   const [mountEntranceDelayMs] = useState<number | null>(entranceDelayMs ?? null);
@@ -162,6 +163,12 @@ export function QuotaCard(props: QuotaCardProps) {
             {displayName}
           </span>
         </header>
+        {accountPlan && (
+          <span className={styles.planLine}>
+            <span className={styles.planLabel}>{t(`${adapter.i18nPrefix}.plan_label`)}</span>
+            <span className={accountPlan.valueClass}>{accountPlan.label}</span>
+          </span>
+        )}
         {rowLayout && routing && (
           <div className={styles.routingCell}>
             <RoutingStatusPill account={routing} now={now} />

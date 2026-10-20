@@ -56,8 +56,10 @@ export function ClaudeQuotaBody({
       ].filter(Boolean)
     : [];
 
+  // In row layout the card's account cell shows the plan, so the chip is skipped here.
+  const showPlan = Boolean(planType) && !rowLayout;
   const hasMeta = Boolean(
-    quota.stale || planType || planItems || afterPlan || extraUsage || quota.dollarWindows?.length
+    quota.stale || showPlan || planItems || afterPlan || extraUsage || quota.dollarWindows?.length
   );
 
   return (
@@ -70,9 +72,9 @@ export function ClaudeQuotaBody({
             })}
           </div>
         )}
-        {(planType || planItems) && (
+        {(showPlan || planItems) && (
           <div className={classes.codexPlan}>
-            {planType && (
+            {showPlan && (
               <span className={classes.codexPlanItem}>
                 <span className={classes.codexPlanLabel}>{t('claude_quota.plan_label')}</span>
                 <span className={classes.codexPlanValue}>{t(`claude_quota.${planType}`)}</span>
