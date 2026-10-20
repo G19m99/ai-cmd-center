@@ -5,8 +5,8 @@
 # default; see server/config.example.yaml for the full reference.
 #
 # Copy this file to config.yaml in the same folder as the binary (next to the
-# static/ folder that holds management.html), then replace every CHANGE-ME value.
-# See docs/setup.md.
+# static/ folder that holds management.html), then replace the management
+# secret-key (CHANGE-ME) and both client keys (your-api-key-*). See docs/setup.md.
 #
 # Note: on first start the server replaces the plaintext management.secret-key
 # below with its bcrypt hash and rewrites this file. Keep the plaintext somewhere
@@ -39,10 +39,16 @@ management:
 
 # Client keys. One per machine, so logs show which machine sent a request.
 # Claude Code sends it as ANTHROPIC_AUTH_TOKEN, Codex through its env_key.
+#
+# The values below are upstream's recognised placeholders: while either is still
+# present the server runs in safe mode and refuses all proxy traffic (/v1/*
+# answers 403 "unsafe_example_api_key"); management.html shows a warning page
+# instead of the dashboard (open management.html?safe-mode=configure to fix the
+# keys there). Replace both with long random keys before use.
 access:
   api-keys:
-    - "machine-1-CHANGE-ME"
-    - "machine-2-CHANGE-ME"
+    - "your-api-key-1"
+    - "your-api-key-2"
 
 # Account selection.
 routing:

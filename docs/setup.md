@@ -94,7 +94,9 @@ access:
     - "<machine-2 key>"
 ```
 
-Replace every `CHANGE-ME`. The server does not reject these placeholders: left in, `machine-1-CHANGE-ME` would work as a client key and `CHANGE-ME` as the dashboard password.
+Replace all three template values. The two client keys ship as `your-api-key-1` / `your-api-key-2`, which the server recognises as placeholders: while either is still in `config.yaml` it starts in **safe mode** and forwards nothing. It logs `unsafe example API key configured; proxy API endpoints disabled until api-keys is updated`, every proxy request (`/v1/*`, `/backend-api/codex/*`) gets a `403` with `"error": "unsafe_example_api_key"`, and `http://<tailscale-ip>:8317/management.html` shows an "Example API key detected" page instead of the dashboard. The management API still works, and the dashboard opens at `http://<tailscale-ip>:8317/management.html?safe-mode=configure` so you can fix the keys there instead. The account logins in step 4 are not affected. Safe mode ends once both placeholders are replaced with real keys.
+
+The dashboard password is different: `CHANGE-ME` is **not** rejected and would work as the management key, so make sure you change `management.secret-key` too.
 
 Save the plaintext dashboard password in a password manager. On first start the server replaces it in `config.yaml` with a bcrypt hash and rewrites the file, so the folder must be writable by the user that runs the server.
 
