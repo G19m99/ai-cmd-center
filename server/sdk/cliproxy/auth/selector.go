@@ -926,6 +926,7 @@ type SessionAffinitySelector struct {
 	matcher           *cliproxysession.MerklePrefixMatcher
 	subagentAffinity  bool
 	rebindOnQuotaOnly bool
+	providerTTL       map[string]time.Duration
 }
 
 const (
@@ -1057,6 +1058,9 @@ type SessionAffinityConfig struct {
 	TTL              time.Duration
 	SubagentAffinity *bool
 	RebindOn         string
+	// ProviderTTL overrides TTL per provider (lowercase key, e.g. "claude");
+	// providers not listed keep TTL.
+	ProviderTTL map[string]time.Duration
 }
 
 // NewSessionAffinitySelector creates a new session-aware selector.
@@ -1080,13 +1084,18 @@ func NewSessionAffinitySelectorWithConfig(cfg SessionAffinityConfig) *SessionAff
 		subagentAffinity = *cfg.SubagentAffinity
 	}
 	rebindOnQuotaOnly := normalizeSessionAffinityRebindOn(cfg.RebindOn) == SessionAffinityRebindOnQuota
-	return &SessionAffinitySelector{
+	selector := &SessionAffinitySelector{
 		fallback:          cfg.Fallback,
 		cache:             NewSessionCache(cfg.TTL),
 		matcher:           cliproxysession.NewMerklePrefixMatcher(cfg.TTL),
 		subagentAffinity:  subagentAffinity,
 		rebindOnQuotaOnly: rebindOnQuotaOnly,
 	}
+	if ttls := normalizeProviderTTL(cfg.ProviderTTL); len(ttls) > 0 {
+		selector.providerTTL = ttls
+		selector.cache.SetTTLResolver(providerTTLResolver(ttls))
+	}
+	return selector
 }
 
 // Trees returns a backward-compatible in-memory session tree store.
@@ -1157,7 +1166,7 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 		availabilityCandidates = positiveWeightAuths(auths)
 	}
 	if primaryID == "" {
-		fallbackAuths, errAvailable := getSelectorAvailableAuths(ctx, availabilityCandidates, provider, model, now)
+		fallbackAuths, errAvailable := s.noSessionCandidates(ctx, availabilityCandidates, provider, model, now)
 		if errAvailable != nil {
 			return nil, errAvailable
 		}
@@ -1171,7 +1180,7 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 	if err != nil {
 		return nil, err
 	}
-	fallbackAuths := highestPriorityAuths(available)
+	fallbackAuths := s.fallbackCandidates(available)
 
 	modelKey := canonicalModelKey(model)
 	cacheKey := provider + "::" + primaryID + "::" + modelKey
@@ -1197,6 +1206,11 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 	if cachedAuthID, ok := s.cache.GetAndRefresh(cacheKey); ok {
 		for _, auth := range available {
 			if auth.ID == cachedAuthID {
+				if moved, ok := s.overrideBinding(provider, model, auth.ID, fallbackAuths); ok {
+					bind(moved.ID)
+					entry.Infof("session-affinity: drain-urgency rebind | session=%s from=%s to=%s provider=%s model=%s", truncateSessionID(primaryID), auth.ID, moved.ID, provider, model)
+					return moved, nil
+				}
 				bind(auth.ID)
 				entry.Infof("session-affinity: cache hit | session=%s auth=%s provider=%s model=%s", truncateSessionID(primaryID), auth.ID, provider, model)
 				return auth, nil
@@ -1224,6 +1238,13 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 		if cachedAuthID, ok := s.cache.Get(fallbackKey); ok {
 			for _, auth := range available {
 				if auth.ID == cachedAuthID {
+					if !isSubagent {
+						if moved, ok := s.overrideBinding(provider, model, auth.ID, fallbackAuths); ok {
+							bind(moved.ID)
+							entry.Infof("session-affinity: drain-urgency rebind | session=%s from=%s to=%s provider=%s model=%s", truncateSessionID(primaryID), auth.ID, moved.ID, provider, model)
+							return moved, nil
+						}
+					}
 					if !isSubagent || s.subagentAffinity {
 						bind(auth.ID)
 						if isFork {
@@ -1346,7 +1367,7 @@ func (s *SessionAffinitySelector) pickLCP(ctx context.Context, provider, model s
 		}
 	}
 
-	fallbackAuths := highestPriorityAuths(available)
+	fallbackAuths := s.fallbackCandidates(available)
 	auth, errPick := s.fallback.Pick(ctx, provider, model, opts, fallbackAuths)
 	if errPick != nil {
 		return nil, true, errPick

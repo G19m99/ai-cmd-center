@@ -446,6 +446,24 @@ type RoutingConfig struct {
 	//     auth errors (429, 401/402/403, 404/model support, invalid_grant) rebind as normal.
 	// Ignored when SessionAffinity is false.
 	SessionAffinityRebindOn string `yaml:"session-affinity-rebind-on,omitempty" json:"session-affinity-rebind-on,omitempty"`
+
+	// SessionAffinityTTLByProvider overrides SessionAffinityTTL per provider (e.g. claude: 1h,
+	// codex: 10m) so a session is re-routed once idle longer than that provider's prompt cache.
+	// The "reset-aware" strategy defaults this to {claude: 1h, codex: 10m}.
+	SessionAffinityTTLByProvider map[string]string `yaml:"session-affinity-ttl-by-provider,omitempty" json:"session-affinity-ttl-by-provider,omitempty"`
+
+	// ResetAware configures the "reset-aware" strategy.
+	ResetAware ResetAwareRoutingConfig `yaml:"reset-aware,omitempty" json:"reset-aware,omitempty"`
+}
+
+// ResetAwareRoutingConfig tunes the "reset-aware" routing strategy, which sends new
+// sessions to the account whose weekly quota resets soonest.
+type ResetAwareRoutingConfig struct {
+	// UrgencyWindow is how soon the rank-1 account's weekly reset must be for active
+	// sessions on other accounts to move to it. Default: "24h".
+	UrgencyWindow string `yaml:"urgency-window,omitempty" json:"urgency-window,omitempty"`
+	// PollInterval is how often account quotas are refreshed. Default: "5m".
+	PollInterval string `yaml:"poll-interval,omitempty" json:"poll-interval,omitempty"`
 }
 
 // OAuthModelAlias defines a model ID alias for a specific channel.

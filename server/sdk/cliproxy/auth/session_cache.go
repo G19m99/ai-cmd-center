@@ -28,6 +28,8 @@ type SessionCache struct {
 	evictionElements map[string]*list.Element
 	maxEntries       int
 	ttl              time.Duration
+	ttlResolver      func(cacheKey string) time.Duration
+	minResolvedTTL   time.Duration
 	stopCh           chan struct{}
 	stopOnce         sync.Once
 }
@@ -126,7 +128,7 @@ func (c *SessionCache) GetAndRefresh(sessionID string) (string, bool) {
 	}
 
 	aliases := compactSessionAliases(mergeSessionAliases([]string{sessionID}, entry.aliases...))
-	c.replaceAliasGroupsLocked(entry.authID, now.Add(c.ttl), aliases, entry)
+	c.replaceAliasGroupsLocked(entry.authID, now.Add(c.ttlFor(sessionID)), aliases, entry)
 	return entry.authID, true
 }
 
@@ -167,7 +169,7 @@ func (c *SessionCache) SetAliases(authID string, sessionIDs ...string) {
 	if len(aliases) == 0 {
 		return
 	}
-	c.replaceAliasGroupsLocked(authID, now.Add(c.ttl), aliases, previousGroups...)
+	c.replaceAliasGroupsLocked(authID, now.Add(c.ttlFor(aliases[0])), aliases, previousGroups...)
 }
 
 func (c *SessionCache) replaceAliasGroupsLocked(authID string, expiresAt time.Time, aliases []string, previousGroups ...sessionEntry) {
@@ -323,7 +325,7 @@ func (c *SessionCache) Touch(sessionID, expectedAuthID string) bool {
 		return false
 	}
 	aliases := compactSessionAliases(mergeSessionAliases([]string{sessionID}, entry.aliases...))
-	c.replaceAliasGroupsLocked(expectedAuthID, now.Add(c.ttl), aliases, entry)
+	c.replaceAliasGroupsLocked(expectedAuthID, now.Add(c.ttlFor(sessionID)), aliases, entry)
 	return true
 }
 
@@ -408,11 +410,7 @@ func (c *SessionCache) Stop() {
 }
 
 func (c *SessionCache) cleanupLoop() {
-	interval := c.ttl / 2
-	if interval < time.Millisecond {
-		interval = time.Millisecond
-	}
-	ticker := time.NewTicker(interval)
+	ticker := time.NewTicker(c.cleanupInterval())
 	defer ticker.Stop()
 	for {
 		select {
@@ -420,6 +418,7 @@ func (c *SessionCache) cleanupLoop() {
 			return
 		case <-ticker.C:
 			c.cleanup()
+			ticker.Reset(c.cleanupInterval())
 		}
 	}
 }

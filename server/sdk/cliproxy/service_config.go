@@ -60,6 +60,9 @@ type routingRuntimeState struct {
 	sessionAffinityTTL       time.Duration
 	sessionAffinitySubagents bool
 	sessionAffinityRebindOn  string
+	// providerTTL is the canonical "provider=ttl,..." form so the state stays comparable.
+	providerTTL   string
+	urgencyWindow time.Duration
 }
 
 func normalizedRoutingRuntimeState(cfg *config.Config) routingRuntimeState {
@@ -78,8 +81,12 @@ func normalizedRoutingRuntimeState(cfg *config.Config) routingRuntimeState {
 		state.strategy = "weighted-round-robin"
 	case "fill-first", "fillfirst", "ff":
 		state.strategy = "fill-first"
+	case "reset-aware", "resetaware", "ra":
+		state.strategy = routingStrategyResetAware
 	}
-	state.sessionAffinity = cfg.Routing.SessionAffinity
+	state.sessionAffinity = cfg.Routing.SessionAffinity || state.strategy == routingStrategyResetAware
+	state.providerTTL = providerTTLState(cfg, state.strategy)
+	state.urgencyWindow = resetAwareUrgencyWindow(cfg)
 	if ttl := strings.TrimSpace(cfg.Routing.SessionAffinityTTL); ttl != "" {
 		if parsed, errParse := time.ParseDuration(ttl); errParse == nil && parsed > 0 {
 			if parsed < time.Second {
@@ -104,6 +111,8 @@ func newRoutingSelector(state routingRuntimeState) coreauth.Selector {
 		selector = &coreauth.WeightedRoundRobinSelector{}
 	case "fill-first":
 		selector = &coreauth.FillFirstSelector{}
+	case routingStrategyResetAware:
+		selector = newResetAwareRoutingSelector(state)
 	default:
 		selector = &coreauth.RoundRobinSelector{}
 	}
@@ -114,6 +123,7 @@ func newRoutingSelector(state routingRuntimeState) coreauth.Selector {
 			TTL:              state.sessionAffinityTTL,
 			SubagentAffinity: &subagents,
 			RebindOn:         state.sessionAffinityRebindOn,
+			ProviderTTL:      providerTTLFromState(state.providerTTL),
 		})
 	}
 	return selector
