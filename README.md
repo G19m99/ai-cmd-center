@@ -17,7 +17,7 @@ It runs on one machine and is reached over Tailscale only.
 | `panel/`   | Fork of the [management center](https://github.com/router-for-me/Cli-Proxy-API-Management-Center) (React), git subtree |
 | `deploy/`  | Config template and run-at-startup files for Windows, macOS and Linux |
 | `scripts/` | `build.ps1` / `build.sh`: build everything into `dist/`              |
-| `docs/`    | Setup guide, upstream sync notes, design spec                        |
+| `docs/`    | Setup guide, joining another machine, upstream sync notes, design spec |
 
 ## Quick start
 
@@ -27,6 +27,7 @@ It runs on one machine and is reached over Tailscale only.
 
 Then follow [docs/setup.md](docs/setup.md): configure, log in to the accounts, run at startup, and point Claude Code and Codex at it.
 
+- Adding another computer to a running host: [docs/join-a-machine.md](docs/join-a-machine.md)
 - Pulling upstream fixes: [docs/UPSTREAM.md](docs/UPSTREAM.md)
 - Design: [docs/superpowers/specs/2026-10-20-ai-cmd-center-design.md](docs/superpowers/specs/2026-10-20-ai-cmd-center-design.md)
 

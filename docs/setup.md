@@ -193,6 +193,8 @@ journalctl -u ai-cmd-center -f
 
 ## 6. Point Claude Code at it
 
+Adding a machine later, after the host is running? [join-a-machine.md](join-a-machine.md) walks through it from start to finish.
+
 On each machine, use that machine's own key from `access.api-keys`. Send it as an extra `x-api-key` header and stay logged in to claude.ai in Claude Code: every model request then goes through the proxy, while your own login keeps claude.ai connectors (Google Drive, Docs and so on) working.
 
 **settings.json** (`~/.claude/settings.json`, applies to every Claude Code session for your user):
