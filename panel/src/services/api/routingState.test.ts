@@ -40,6 +40,29 @@ describe('normalizeRoutingState', () => {
       weeklyResetsAt: '2026-10-21T03:51:14.000Z',
       headroom: 38,
       bonus: { known: true, available: 1, clears: ['seven_day'] },
+      fetchedAt: '2026-10-20T15:51:14.000Z',
+      stale: false,
+      lastError: '',
+      windows: [
+        {
+          key: 'five_hour',
+          label: '5-hour',
+          utilization: 28,
+          resetsAt: '2026-10-20T18:51:14.000Z',
+          weekly: false,
+          modelScope: '',
+          routing: true,
+        },
+        {
+          key: 'seven_day',
+          label: '7-day',
+          utilization: 62,
+          resetsAt: '2026-10-21T03:51:14.000Z',
+          weekly: true,
+          modelScope: '',
+          routing: true,
+        },
+      ],
     });
     expect(alice.freeAt).toBeUndefined();
     expect(bob.status).toBe('standby');
@@ -70,6 +93,51 @@ describe('normalizeRoutingState', () => {
     expect(account?.freeAt).toBe('2026-10-20T18:51:14.000Z');
     expect(account?.bonus.known).toBe(false);
     expect(account?.label).toBe('capped');
+    expect(account?.windows).toEqual([]);
+    expect(account?.fetchedAt).toBeUndefined();
+  });
+
+  test('keeps a failed poll visible and drops unusable windows', () => {
+    const state = normalizeRoutingState({
+      accounts: [
+        {
+          auth_index: 'flaky',
+          provider: 'claude',
+          quota: {
+            fetched_at: '',
+            stale: true,
+            last_error: 'usage endpoint returned 500',
+            windows: [
+              { key: 'seven_day', label: '7-day', utilization: 'n/a', weekly: true },
+              { label: 'no key', utilization: 5 },
+              {
+                key: 'iguana_necktie',
+                label: '7-day Fable',
+                utilization: 100,
+                resets_at: '',
+                weekly: true,
+                model_scope: 'fable',
+                routing: true,
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const account = state?.accounts[0];
+    expect(account?.stale).toBe(true);
+    expect(account?.lastError).toBe('usage endpoint returned 500');
+    expect(account?.fetchedAt).toBeUndefined();
+    expect(account?.windows).toEqual([
+      {
+        key: 'iguana_necktie',
+        label: '7-day Fable',
+        utilization: 100,
+        weekly: true,
+        modelScope: 'fable',
+        routing: true,
+      },
+    ]);
   });
 
   test('drops malformed accounts and tolerates missing collections', () => {

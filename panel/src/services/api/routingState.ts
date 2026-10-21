@@ -32,6 +32,22 @@ export type RoutingBonus = {
   expiresAt?: string;
 };
 
+/** One usage window as the server's poller last read it. */
+export type RoutingWindow = {
+  /** `five_hour`, `seven_day`, `iguana_necktie`, `primary_window`, ... */
+  key: string;
+  /** Server label, e.g. `5-hour`, `7-day`, `7-day Fable`, `Weekly`. */
+  label: string;
+  /** Percent used, 0–100. */
+  utilization: number;
+  resetsAt?: string;
+  weekly: boolean;
+  /** Lowercase model or feature the window is limited to; empty for all models. */
+  modelScope: string;
+  /** False for windows that never block routing (Codex code review). */
+  routing: boolean;
+};
+
 export type RoutingAccount = {
   authIndex: string;
   provider: 'claude' | 'codex' | string;
@@ -48,6 +64,13 @@ export type RoutingAccount = {
   weeklyResetsAt?: string;
   headroom: number;
   bonus: RoutingBonus;
+  /** When the poller last read this account's usage; absent before the first read. */
+  fetchedAt?: string;
+  /** True when the last good read is older than the server's staleness limit. */
+  stale: boolean;
+  /** Why the last poll failed; empty when it succeeded. */
+  lastError: string;
+  windows: RoutingWindow[];
 };
 
 export type RoutingProviderSummary = {
@@ -106,6 +129,25 @@ const normalizeBonus = (value: unknown): RoutingBonus => {
   };
 };
 
+/** Null for a window without a key or a numeric utilization. */
+const normalizeWindow = (value: unknown): RoutingWindow | null => {
+  const window = asRecord(value);
+  if (!window) return null;
+  const key = asString(window.key);
+  const utilization = window.utilization;
+  if (!key || typeof utilization !== 'number' || !Number.isFinite(utilization)) return null;
+  const resetsAt = asIsoTime(window.resets_at);
+  return {
+    key,
+    label: asString(window.label) || key,
+    utilization,
+    ...(resetsAt ? { resetsAt } : {}),
+    weekly: window.weekly === true,
+    modelScope: asString(window.model_scope),
+    routing: window.routing !== false,
+  };
+};
+
 /** Null for anything that cannot be matched to a card (no usable auth_index). */
 export function normalizeRoutingAccount(value: unknown): RoutingAccount | null {
   const entry = asRecord(value);
@@ -117,6 +159,12 @@ export function normalizeRoutingAccount(value: unknown): RoutingAccount | null {
   const quota = asRecord(entry.quota);
   const freeAt = asIsoTime(entry.free_at);
   const weeklyResetsAt = asIsoTime(entry.weekly_resets_at);
+  const fetchedAt = asIsoTime(quota?.fetched_at);
+  const windows = Array.isArray(quota?.windows)
+    ? quota.windows
+        .map(normalizeWindow)
+        .filter((window): window is RoutingWindow => window !== null)
+    : [];
   return {
     authIndex,
     provider,
@@ -130,6 +178,10 @@ export function normalizeRoutingAccount(value: unknown): RoutingAccount | null {
     ...(weeklyResetsAt ? { weeklyResetsAt } : {}),
     headroom: asNumber(entry.headroom),
     bonus: normalizeBonus(quota?.bonus),
+    ...(fetchedAt ? { fetchedAt } : {}),
+    stale: quota?.stale === true,
+    lastError: asString(quota?.last_error),
+    windows,
   };
 }
 

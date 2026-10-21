@@ -100,5 +100,8 @@ export const routingAccount = (overrides: Partial<RoutingAccount> = {}): Routing
   limitedBy: '',
   headroom: 100,
   bonus: { known: true, available: 0, clears: [] },
+  stale: false,
+  lastError: '',
+  windows: [],
   ...overrides,
 });
