@@ -1,23 +1,16 @@
 /**
- * The quota page for the routed providers: one panel each for Claude and
- * Codex, opening with a sentence on which account takes new requests and why,
- * then every account's usage. Reads only the server's routing state, which the
- * poller refreshes every 5 minutes, so it shows exactly what routing acts on.
+ * Account usage for the routed providers, Claude then Codex: a sentence on
+ * which account takes new requests and why, then one card per account. Reads
+ * only the server's routing state, which the poller refreshes every 5 minutes,
+ * so it shows exactly what routing acts on. The dashboard supplies the heading.
  */
 
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/components/ui/Button';
 import type { RoutingAccount, RoutingState } from '@/services/api/routingState';
 import type { AuthFileItem } from '@/types';
 import { getQuotaCacheKey } from '@/utils/quota/identity';
-import { AccountRow } from './AccountRow';
-import {
-  checkedText,
-  headlineText,
-  oldestFetchMs,
-  providerHeadline,
-  sortAccounts,
-} from './accountView';
+import { AccountCard } from './AccountCard';
+import { headlineText, providerHeadline, sortAccounts } from './accountView';
 import styles from './Accounts.module.scss';
 
 const PROVIDERS = ['claude', 'codex'] as const;
@@ -29,15 +22,13 @@ export interface AccountsOverviewProps {
   now: number;
   filesByIndex: ReadonlyMap<string, AuthFileItem>;
   canAct: boolean;
-  checking: boolean;
   /** Cache key of the Codex credential whose bonus reset is being spent. */
   resettingName: string | null;
-  onCheckNow: () => void;
   onRefreshAccount: (authIndex: string) => void;
   onCodexReset: (file: AuthFileItem) => void;
 }
 
-function ProviderPanel(
+function ProviderGroup(
   props: AccountsOverviewProps & {
     provider: (typeof PROVIDERS)[number];
     accounts: RoutingAccount[];
@@ -48,20 +39,19 @@ function ProviderPanel(
   const { t } = useTranslation();
   const name = t(`routing.provider_${provider}`);
   const headingId = `quota-provider-${provider}`;
-  const sorted = sortAccounts(accounts);
 
   return (
     <section className={styles.provider} aria-labelledby={headingId}>
-      <header className={styles.providerHead}>
-        <h2 id={headingId} className={styles.providerName}>
+      <div className={styles.providerHead}>
+        <h3 id={headingId} className={styles.providerName}>
           {name}
-        </h2>
+        </h3>
         {accounts.length > 0 && (
           <span className={styles.count}>
             {t('quota_accounts.accounts_count', { count: accounts.length })}
           </span>
         )}
-      </header>
+      </div>
       {accounts.length === 0 ? (
         <p className={styles.empty}>
           {t(`quota_accounts.empty_${provider}`)}{' '}
@@ -80,17 +70,16 @@ function ProviderPanel(
               locale
             )}
           </p>
-          <ul className={styles.accounts}>
-            {sorted.map((account, index) => {
+          <ul className={styles.cards}>
+            {sortAccounts(accounts).map((account) => {
               const file = filesByIndex.get(account.authIndex);
               return (
-                <AccountRow
+                <AccountCard
                   key={account.authIndex}
                   account={account}
                   file={file}
                   now={now}
                   locale={locale}
-                  showColumnHeads={index === 0}
                   canAct={props.canAct}
                   resetting={file !== undefined && props.resettingName === getQuotaCacheKey(file)}
                   onRefresh={() => props.onRefreshAccount(account.authIndex)}
@@ -106,34 +95,13 @@ function ProviderPanel(
 }
 
 export function AccountsOverview(props: AccountsOverviewProps) {
-  const { state, error, now, canAct, checking, onCheckNow } = props;
+  const { state, error } = props;
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage;
   const accounts = state?.accounts ?? [];
 
   return (
     <div className={styles.overview}>
-      <header className={styles.head}>
-        <div className={styles.titles}>
-          <h1 className={styles.title}>{t('quota_accounts.title')}</h1>
-          <p className={styles.subtitle}>{t('quota_accounts.subtitle')}</p>
-        </div>
-        <div className={styles.headActions}>
-          {state && (
-            <span className={styles.checked}>{checkedText(t, oldestFetchMs(accounts), now)}</span>
-          )}
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onCheckNow}
-            loading={checking}
-            disabled={!canAct || checking}
-          >
-            {checking ? t('quota_accounts.checking') : t('quota_accounts.check_now')}
-          </Button>
-        </div>
-      </header>
-
       {error && (
         <p className={styles.loadError} role="alert">
           {t('quota_accounts.load_error', { message: error })}
@@ -143,7 +111,7 @@ export function AccountsOverview(props: AccountsOverviewProps) {
       {state === null
         ? !error && <p className={styles.loading}>{t('quota_accounts.loading')}</p>
         : PROVIDERS.map((provider) => (
-            <ProviderPanel
+            <ProviderGroup
               key={provider}
               {...props}
               provider={provider}

@@ -291,6 +291,8 @@ export function useDashboardOverview() {
     traffic,
     providers,
     credentials,
+    /** The credential files; null until the first list arrives or after a failed load. */
+    authFiles,
     refresh,
   };
 }

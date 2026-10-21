@@ -171,6 +171,25 @@ describe('routing state store', () => {
       post.mockRestore();
     }
   });
+
+  test('a failed account refresh shows on that account, not as a page error', async () => {
+    // The server answers 502 when the upstream usage read fails (e.g. HTTP 429)
+    // and records the failure on the account as last_error; re-reading the
+    // state puts it on the account's card.
+    const post = spyOn(apiClient, 'post').mockRejectedValue(
+      apiError(502, 'failed to refresh quota: claude usage: HTTP 429')
+    );
+    const get = spyOn(apiClient, 'get').mockResolvedValue(ROUTING_STATE_SAMPLE);
+    try {
+      await useRoutingStateStore.getState().refreshAccount('x');
+      expect(useRoutingStateStore.getState().error).toBe('');
+      expect(get).toHaveBeenCalledTimes(1);
+      expect(useRoutingStateStore.getState().state?.accounts).toHaveLength(2);
+    } finally {
+      post.mockRestore();
+      get.mockRestore();
+    }
+  });
 });
 
 describe('helpers', () => {

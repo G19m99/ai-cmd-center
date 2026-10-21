@@ -251,7 +251,16 @@ export async function refreshRoutingState(authIndex?: string): Promise<RoutingSt
   }
 }
 
+/**
+ * Clear the proxy's routing cooldown for one account, e.g. after a bonus reset
+ * cleared its limits upstream. Local to the proxy: nothing is sent to Anthropic.
+ */
+export async function resetRoutingCooldown(authIndex: string): Promise<void> {
+  await apiClient.post('/routing/cooldown/reset', { auth_index: authIndex });
+}
+
 export const routingStateApi = {
   fetch: fetchRoutingState,
   refresh: refreshRoutingState,
+  resetCooldown: resetRoutingCooldown,
 };

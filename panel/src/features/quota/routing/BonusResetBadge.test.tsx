@@ -62,13 +62,12 @@ describe('redeem stays manual', () => {
   });
 
   test('the accounts list spends a reset only through those confirmed paths', () => {
-    const row = read('src/features/quota/accounts/AccountRow.tsx');
+    const row = read('src/features/quota/accounts/AccountCard.tsx');
     expect(row).not.toContain('resetGrantOperations');
     // The Claude button only ever reaches the hook's confirm(), which opens the dialog.
-    expect(row).toContain('const { blocked, confirm, readFor } = reset;');
-    expect(row).toContain('onClick={start}');
+    expect(row).toContain('onClick={reset.confirm}');
     expect(row).toContain('onClick={() => props.onCodexReset(file)}');
-    const page = read('src/features/quota/QuotaPage.tsx');
-    expect(page).toContain('resetQuota(file, QUOTA_ADAPTERS.codex)');
+    const section = read('src/features/dashboard/components/AccountsSection.tsx');
+    expect(section).toContain('resetQuota(file, QUOTA_ADAPTERS.codex)');
   });
 });

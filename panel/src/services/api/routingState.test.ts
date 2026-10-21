@@ -4,6 +4,7 @@ import {
   fetchRoutingState,
   normalizeRoutingState,
   refreshRoutingState,
+  resetRoutingCooldown,
   ROUTING_STATE_REFRESH_ALL_TIMEOUT_MS,
   ROUTING_STATE_REFRESH_ONE_TIMEOUT_MS,
 } from '@/services/api/routingState';
@@ -205,6 +206,18 @@ describe('refreshRoutingState', () => {
         { timeout: ROUTING_STATE_REFRESH_ONE_TIMEOUT_MS }
       );
       expect(state?.accounts).toHaveLength(2);
+    } finally {
+      post.mockRestore();
+    }
+  });
+
+  test('clearing an account cooldown POSTs its auth index', async () => {
+    const post = spyOn(apiClient, 'post').mockResolvedValue({ status: 'ok' });
+    try {
+      await resetRoutingCooldown('8dbc2c9a3bc57d7c');
+      expect(post).toHaveBeenCalledWith('/routing/cooldown/reset', {
+        auth_index: '8dbc2c9a3bc57d7c',
+      });
     } finally {
       post.mockRestore();
     }

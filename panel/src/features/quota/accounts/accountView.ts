@@ -254,22 +254,26 @@ export function checkedText(t: Translate, fetchedMs: number | null, now: number)
   return t(`${PREFIX}.checked_ago`, { duration: formatCompactDuration(age) });
 }
 
-/** The reset column: the moment, plus how long until it when it is ahead. */
-export function resetCell(
+/**
+ * A limit's reset as a phrase (`Resets tomorrow at 1:00 PM`), plus how long
+ * until it when it is ahead (`in 23h 59m`). A window that has not started
+ * reads `Not started`.
+ */
+export function resetLine(
   t: Translate,
   window: RoutingWindow,
   now: number,
   locale?: string
-): { moment: string; relative: string | null } {
+): { text: string; relative: string | null } {
   const ms = parseIsoToMs(window.resetsAt);
   if (ms === null) {
     return {
-      moment: t(`${PREFIX}.${window.utilization > 0 ? 'reset_unknown' : 'reset_not_started'}`),
+      text: t(`${PREFIX}.${window.utilization > 0 ? 'reset_unknown' : 'reset_not_started'}`),
       relative: null,
     };
   }
   return {
-    moment: formatResetMoment(t, ms, now, locale),
+    text: t(`${PREFIX}.resets_at`, { time: formatResetMoment(t, ms, now, locale, 'inline') }),
     relative:
       ms > now ? t(`${PREFIX}.in_duration`, { duration: formatCompactDuration(ms - now) }) : null,
   };

@@ -145,14 +145,24 @@ export const useRoutingStateStore = create<RoutingStateStore>((set, get) => {
       set({ showEmails: value });
     },
     load: () => commit(begin('poll'), fetchRoutingState),
-    refreshAccount: (authIndex) =>
-      commit(
+    refreshAccount: async (authIndex) => {
+      let upstreamFailed = false;
+      await commit(
         begin('refresh'),
         () => refreshRoutingState(authIndex),
-        // 409: poller not running (strategy is not reset-aware). Not actionable here.
-        (error) => (error as ApiError | undefined)?.status === 409,
+        (error) => {
+          const status = (error as ApiError | undefined)?.status;
+          // 502: the upstream usage read failed (often HTTP 429). The server records
+          // that on the account as last_error, so it belongs on the account's card,
+          // not in a page-level error; re-read the state below to show it.
+          if (status === 502) upstreamFailed = true;
+          // 409: poller not running (strategy is not reset-aware). Not actionable here.
+          return status === 409 || status === 502;
+        },
         false
-      ),
+      );
+      if (upstreamFailed) await get().load();
+    },
     refreshAll: () =>
       commit(
         begin('refresh'),

@@ -7,6 +7,7 @@ import {
   readClaudeResetGrants,
   type AnthropicResetSettledCode,
 } from '@/services/api/claudeResetGrants';
+import { selectResetGrant } from './selectResetGrant';
 
 export type ResetGrantFailureStage =
   'organization' | 'status' | 'eligibility' | 'request_id' | 'operation';
@@ -76,7 +77,12 @@ export function createResetGrantOperations(deps = defaultDependencies) {
       syncSession();
       return operations.get(key);
     },
-    async run(key: string, authIndex: string, grantId: string) {
+    /**
+     * Spend one reset. Without `grantId` the fresh status read below picks the
+     * grant the card would recommend, so no separate read is needed beforehand;
+     * a retry always reuses the grant of the original operation.
+     */
+    async run(key: string, authIndex: string, grantId?: string) {
       const session = syncSession();
       const assertSession = () => {
         if (deps.revision() !== session) throw new ResetGrantPreflightError('operation', 'session');
@@ -88,7 +94,8 @@ export function createResetGrantOperations(deps = defaultDependencies) {
         if (operation?.code) operation = undefined;
         if (
           operation &&
-          (operation.grantId !== grantId || deps.now() - operation.createdAt >= RETRY_WINDOW_MS)
+          ((grantId !== undefined && operation.grantId !== grantId) ||
+            deps.now() - operation.createdAt >= RETRY_WINDOW_MS)
         )
           throw new ResetGrantPreflightError('operation', 'expired');
         const wasRetry = Boolean(operation);
@@ -101,9 +108,11 @@ export function createResetGrantOperations(deps = defaultDependencies) {
         if (!operation) {
           const status = await readPreflight('status', () => deps.readStatus(authIndex));
           assertSession();
-          const grant = status.grants.find((item) => item.id === grantId);
           const now = deps.now();
-          const blocker = anthropicResetGrantBlocker(status, grantId);
+          const chosen = grantId ?? selectResetGrant(status, now)?.id;
+          if (!chosen) throw new ResetGrantPreflightError('eligibility', 'blocked_no_grant');
+          const grant = status.grants.find((item) => item.id === chosen);
+          const blocker = anthropicResetGrantBlocker(status, chosen);
           const reason =
             blocker ??
             (!grant
@@ -122,7 +131,7 @@ export function createResetGrantOperations(deps = defaultDependencies) {
           } catch {
             throw new ResetGrantPreflightError('request_id', 'generation_failed');
           }
-          operation = { grantId, organization, requestId, createdAt: now };
+          operation = { grantId: chosen, organization, requestId, createdAt: now };
           operations.set(key, operation);
         }
         // Re-check immediately before dispatch; never send against a replacement connection.
@@ -130,7 +139,12 @@ export function createResetGrantOperations(deps = defaultDependencies) {
         if (wasRetry && deps.now() - operation.createdAt >= RETRY_WINDOW_MS) {
           throw new ResetGrantPreflightError('operation', 'expired');
         }
-        const code = await deps.claim(authIndex, organization, grantId, operation.requestId);
+        const code = await deps.claim(
+          authIndex,
+          organization,
+          operation.grantId,
+          operation.requestId
+        );
         assertSession();
         // A refusal on a retry cannot prove that the earlier ambiguous POST did not spend.
         if (!wasRetry || code === 'reset' || code === 'already_used') operation.code = code;

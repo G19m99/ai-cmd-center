@@ -4,7 +4,6 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import i18n from '@/i18n';
 import { normalizeRoutingState, type RoutingState } from '@/services/api/routingState';
-import { useAuthStore } from '@/stores/useAuthStore';
 import { AccountsOverview, type AccountsOverviewProps } from './AccountsOverview';
 
 const at = (day: number, hour: number, minute: number, second = 0, ms = 0) =>
@@ -97,9 +96,7 @@ const props = (overrides: Partial<AccountsOverviewProps> = {}): AccountsOverview
   now: NOW,
   filesByIndex: new Map(),
   canAct: true,
-  checking: false,
   resettingName: null,
-  onCheckNow: () => {},
   onRefreshAccount: () => {},
   onCodexReset: () => {},
   ...overrides,
@@ -139,18 +136,24 @@ describe('AccountsOverview', () => {
 
   test('reports usage as percent used with named limits and reset times', () => {
     const page = text(render());
-    expect(page).toContain('Limit Used Resets');
-    expect(page).toContain('Weekly, all models 93% Tomorrow 3:00 PM');
-    expect(page).toContain('Weekly, Fable 100% Tomorrow 3:00 PM');
-    expect(page).toContain('5-hour session 18% Today 2:40 PM in 1h 40m');
-    expect(page).toContain('Weekly, all models 22% Tomorrow 1:00 PM');
+    expect(page).toContain('Weekly, all models 93% Resets tomorrow at 3:00 PM in 1d 2h');
+    expect(page).toContain('Weekly, Fable 100% Resets tomorrow at 3:00 PM in 1d 2h');
+    expect(page).toContain('5-hour session 18% Resets today at 2:40 PM in 1h 40m');
+    expect(page).toContain('Weekly, all models 22% Resets tomorrow at 1:00 PM in 23h 59m');
     expect(page).toContain('5-hour session 0% Not started');
+  });
+
+  test('gives every account its own card', () => {
+    const markup = render();
+    expect(markup.match(/<li[^>]*data-status="(draining|standby)"/g)).toHaveLength(2);
+    expect(markup).not.toContain('<table');
+    expect(markup).not.toContain('<h1');
   });
 
   test('marks how close each limit is', () => {
     const markup = render();
-    expect(markup).toMatch(/<tr data-level="high"><th scope="row">Weekly, all models<\/th>/);
-    expect(markup).toMatch(/<tr data-level="full"><th scope="row">Weekly, Fable<\/th>/);
+    expect(markup).toMatch(/<li data-level="high">(?:(?!<\/li>)[\s\S])*Weekly, all models/);
+    expect(markup).toMatch(/<li data-level="full">(?:(?!<\/li>)[\s\S])*Weekly, Fable/);
   });
 
   test('status and open conversations per account', () => {
@@ -190,51 +193,19 @@ describe('AccountsOverview', () => {
     expect(page).toContain('Waiting for the first usage check.');
   });
 
-  test('header: when usage was checked and a way to check now', () => {
-    const page = text(render());
-    expect(page).toContain('Quota');
-    expect(page).toContain('Checked 3m ago');
-    expect(page).toContain('Check now');
-  });
-
-  test('bonus resets are read from Anthropic only after a click, not on page load', () => {
-    // The server already polls the same usage endpoint; a read per page load
-    // pushed the account into HTTP 429.
-    const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
-    const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
-    const memory = new Map<string, string>();
-    Object.defineProperty(globalThis, 'localStorage', {
-      configurable: true,
-      value: {
-        getItem: (key: string) => memory.get(key) ?? null,
-        setItem: (key: string, value: string) => memory.set(key, value),
-        removeItem: (key: string) => memory.delete(key),
-      },
-    });
-    Object.defineProperty(globalThis, 'window', {
-      configurable: true,
-      value: { location: { host: 'proxy.invalid' } },
-    });
-    useAuthStore.setState({ connectionStatus: 'connected' });
-    try {
-      const file = {
-        name: 'claude-1-gershy@example.com.json',
-        auth_index: 'first',
-        type: 'claude',
-      };
-      const markup = render({ filesByIndex: new Map([['first', file]]) });
-      const button = markup.match(/<button[^>]*>(?:(?!<\/button>)[\s\S])*Use bonus reset/)?.[0];
-      expect(button).toBeDefined();
-      expect(button).not.toMatch(/\sdisabled=""/);
-    } finally {
-      useAuthStore.setState({ connectionStatus: 'disconnected' });
-      if (originalStorage) Object.defineProperty(globalThis, 'localStorage', originalStorage);
-      else Reflect.deleteProperty(globalThis, 'localStorage');
-      if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
-      else Reflect.deleteProperty(globalThis, 'window');
-    }
-    const row = readFileSync(new URL('./AccountRow.tsx', import.meta.url), 'utf8');
-    expect(row).toMatch(/useClaudeResetGrants\(\s*props\.file,\s*request > 0,/);
+  test('the bonus button opens the confirmation without reading Anthropic first', () => {
+    // Anthropic rate-limits the usage endpoint the grants live on, and the
+    // server already polls it; the only read is the check right before the claim.
+    // Static rendering cannot model a connected session (zustand serves its initial
+    // state), so the wiring is checked in the source; the hook's own test pins
+    // that confirming needs no prior read.
+    const file = { name: 'claude-1-gershy@example.com.json', auth_index: 'first', type: 'claude' };
+    const markup = render({ filesByIndex: new Map([['first', file]]) });
+    expect(markup).toMatch(/<button[^>]*>(?:(?!<\/button>)[\s\S])*Use bonus reset/);
+    const row = readFileSync(new URL('./AccountCard.tsx', import.meta.url), 'utf8');
+    expect(row).toMatch(/useClaudeResetGrants\(\s*props\.file,\s*false,/);
+    expect(row).toContain('disabled={reset.blocked}');
+    expect(row).toContain('onClick={reset.confirm}');
   });
 
   test('no keyframes name camel-cases into a class name of the same module', () => {

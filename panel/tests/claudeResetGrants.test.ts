@@ -1,6 +1,7 @@
 import { selectResetGrant } from '../src/features/quota/providers/claude/selectResetGrant';
 
 import { afterEach, describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import {
   anthropicResetGrantBlocker,
   claimClaudeResetGrant,
@@ -185,6 +186,66 @@ test('unknown outcome retains request ID across retries; expiry blocks', async (
   h.advance();
   await expect(operations.run('account', 'a', grant.id)).rejects.toThrow('expired');
   expect(h.ids).toHaveLength(2);
+});
+
+test('without a grant chosen beforehand, the preflight read picks one: one status read', async () => {
+  const h = setup();
+  let reads = 0;
+  h.deps.readStatus = async () => {
+    reads++;
+    return status();
+  };
+  const grants: string[] = [];
+  h.deps.claim = async (_auth, _org, chosen, id) => {
+    grants.push(chosen);
+    h.ids.push(id);
+    return 'reset';
+  };
+  const operations = createResetGrantOperations(h.deps);
+  expect(await operations.run('account', 'a')).toEqual({ code: 'reset', unresolved: false });
+  expect(reads).toBe(1);
+  expect(grants).toEqual([grant.id]);
+});
+
+test('without a grant chosen beforehand and none usable, nothing is sent', async () => {
+  const h = setup();
+  h.deps.readStatus = async () => ({
+    ...status(),
+    grants: [{ ...status().grants[0], usableNow: false }],
+  });
+  await expect(createResetGrantOperations(h.deps).run('account', 'a')).rejects.toThrow(
+    'blocked_no_grant'
+  );
+  expect(h.ids).toHaveLength(0);
+});
+
+test('a retry without a grant argument reuses the original grant and request ID', async () => {
+  const h = setup();
+  const grants: string[] = [];
+  h.deps.claim = async (_auth, _org, chosen, id) => {
+    grants.push(chosen);
+    h.ids.push(id);
+    throw new AnthropicResetGrantUnknownOutcome();
+  };
+  const operations = createResetGrantOperations(h.deps);
+  await expect(operations.run('account', 'a')).rejects.toThrow();
+  await expect(operations.run('account', 'a')).rejects.toThrow();
+  expect(grants).toEqual([grant.id, grant.id]);
+  expect(h.ids).toEqual(['request-1', 'request-1']);
+});
+
+test('the card hook needs no grant read to confirm and refreshes only after a claim was sent', () => {
+  const source = readFileSync('src/features/quota/providers/claude/ClaudeResetGrants.tsx', 'utf8');
+  // Confirming does not wait for a status read: the preflight picks the grant.
+  expect(source).not.toMatch(/const blocked =[^;]*!selected/);
+  // A refusal before the POST changed nothing upstream, so it costs no usage re-read.
+  expect(source).toContain('claimed = !(error instanceof ResetGrantPreflightError);');
+  expect(source).toContain('if (current() && claimed) onRefresh();');
+  // A spent reset clears the limits upstream; the proxy's own cooldown for that
+  // account (set by the earlier 429s) must go too, or routing keeps skipping it.
+  expect(source).toMatch(
+    /answer\.code === 'reset'\)[\s\S]{0,120}await resetRoutingCooldown\(authIndex\)/
+  );
 });
 
 test('fresh spend rechecks eligibility and blocks concurrent clicks', async () => {
