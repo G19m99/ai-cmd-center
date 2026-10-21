@@ -2,10 +2,10 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  IconBot,
   IconFileText,
   IconSidebarConfig,
   IconSidebarLogs,
+  IconSidebarOauth,
   IconSidebarQuota,
   IconSidebarSystem,
 } from '@/components/ui/icons';
@@ -184,10 +184,10 @@ export function DashboardPage() {
 
   const ctaCards = [
     {
-      to: '/ai-providers',
-      icon: <IconBot size={20} />,
-      title: t('nav.ai_providers'),
-      description: t('dashboard.cta_providers_desc'),
+      to: '/oauth',
+      icon: <IconSidebarOauth size={20} />,
+      title: t('nav.oauth'),
+      description: t('dashboard.cta_oauth_desc'),
     },
     {
       to: '/auth-files',
@@ -244,8 +244,8 @@ export function DashboardPage() {
             {heroMetaLine}
           </p>
           <div className={styles.heroActions} data-reveal>
-            <Link to="/ai-providers" className={styles.primaryAction}>
-              {t('dashboard.cta_manage_providers')}
+            <Link to="/auth-files" className={styles.primaryAction}>
+              {t('dashboard.cta_manage_accounts')}
             </Link>
             <Link to="/logs" className={styles.ghostAction}>
               {t('dashboard.cta_inspect_logs')}{' '}
