@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -142,7 +143,15 @@ func (h *Handler) managementCallbackURL(path string) (string, error) {
 	if h.cfg.TLS.Enable {
 		scheme = "https"
 	}
-	return fmt.Sprintf("%s://127.0.0.1:%d%s", scheme, h.cfg.Port, path), nil
+	// The browser is redirected here, so use the bound host when the server
+	// listens on one address only; 127.0.0.1 would not answer.
+	host := "127.0.0.1"
+	if bound := strings.TrimSpace(h.cfg.Host); bound != "" {
+		if ip := net.ParseIP(bound); ip == nil || !ip.IsUnspecified() {
+			host = bound
+		}
+	}
+	return fmt.Sprintf("%s://%s%s", scheme, net.JoinHostPort(host, strconv.Itoa(h.cfg.Port)), path), nil
 }
 
 func pluginAuthProviderFromURL(requestURL *url.URL) (string, bool) {
