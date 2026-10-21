@@ -10,7 +10,7 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File run-proxy.ps1 -InstallDir C:\ai-cmd-center
 # The server's own output of its latest run goes to proxy.out.log / proxy.err.log.
 # To stop everything:
-#   End-ScheduledTask -TaskName 'AI Command Center'; Get-Process ai-cmd-center -ErrorAction SilentlyContinue | Stop-Process
+#   Stop-ScheduledTask -TaskName 'AI Command Center'; Get-Process ai-cmd-center -ErrorAction SilentlyContinue | Stop-Process
 param(
     [string]$InstallDir = $PSScriptRoot,
     [string]$ConfigPath = '',
@@ -47,7 +47,7 @@ try {
         Start-Sleep -Seconds $RestartDelaySeconds
     }
 } finally {
-    # Runs on Ctrl+C. A hard kill of this script (e.g. End-ScheduledTask) skips it,
+    # Runs on Ctrl+C. A hard kill of this script (e.g. Stop-ScheduledTask) skips it,
     # so stop ai-cmd-center.exe separately in that case (see the header).
     if ($proc -and -not $proc.HasExited) {
         Write-Log "supervisor stopping; killing ai-cmd-center (pid $($proc.Id))"

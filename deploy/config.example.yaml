@@ -38,7 +38,8 @@ management:
   disable-auto-update-panel: true
 
 # Client keys. One per machine, so logs show which machine sent a request.
-# Claude Code sends it as ANTHROPIC_AUTH_TOKEN, Codex through its env_key.
+# Claude Code sends it as an x-api-key header (ANTHROPIC_CUSTOM_HEADERS, see
+# docs/setup.md section 6), Codex through its env_key.
 #
 # The values below are upstream's recognised placeholders: while either is still
 # present the server runs in safe mode and refuses all proxy traffic (/v1/*

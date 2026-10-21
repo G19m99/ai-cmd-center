@@ -10,7 +10,7 @@
 # (copy the contents of dist\ there and create config.yaml from config.example.yaml).
 #
 # Stop it with:
-#   End-ScheduledTask -TaskName 'AI Command Center'; Get-Process ai-cmd-center -ErrorAction SilentlyContinue | Stop-Process
+#   Stop-ScheduledTask -TaskName 'AI Command Center'; Get-Process ai-cmd-center -ErrorAction SilentlyContinue | Stop-Process
 # Remove the task with:
 #   Unregister-ScheduledTask -TaskName 'AI Command Center' -Confirm:$false
 param(
