@@ -76,3 +76,15 @@ routing:
 oauth:
   # Authentication directory (supports ~ for the home directory). Legacy name: top-level auth-dir.
   auth-dir: "~/.ai-cmd-center/auths"
+
+# Application logs. File logging feeds the dashboard's Logs Viewer.
+observability:
+  logs:
+    # Write application logs to rotating files (main.log). With the auth-dir above
+    # they land in ~/.ai-cmd-center/auths/logs.
+    logging-to-file: true
+    # Delete the oldest log files once the folder passes this size (MB).
+    logs-max-total-size-mb: 100
+    # Keep false: true saves full prompts and responses to disk. Failed requests
+    # are still saved there as error-*.log files, the last 10 only.
+    request-log: false

@@ -152,9 +152,11 @@ What the task does:
 - It runs `run-proxy.ps1` (copied into `<install-dir>`) in a hidden PowerShell window, so there's no console window to close by accident.
 - That script starts `ai-cmd-center.exe`, waits for it to exit, and starts it again after 15 seconds. Task Scheduler's own restart setting only covers a failed launch, not the program exiting, so the script does the restarting.
 
-Logs in `<install-dir>`:
-- `run-proxy.log`: one timestamped line per start and exit. Repeated `exited ... restarting` lines mean it keeps failing; check the server output.
-- `proxy.out.log`: the server's output from its latest run (bind errors appear here).
+Logs:
+- `run-proxy.log` in `<install-dir>`: one timestamped line per start and exit. Repeated `exited ... restarting` lines mean it keeps failing; check the server log.
+- `main.log` in `~/.ai-cmd-center/auths/logs`: the server's log, also shown on the dashboard's **Logs Viewer** page. The template turns on `observability.logs.logging-to-file` and caps the folder at 100 MB. With file logging off, these lines go to `proxy.out.log` instead and the Logs Viewer says "File logging is required".
+- `error-*.log` in the same folder: the last 10 failed requests, including their prompts. Request logging (`request-log`) stays off, so successful requests aren't saved.
+- `proxy.out.log` in `<install-dir>`: the few messages the server prints outside its log, from its latest run.
 
 Note that the task runs at **logon**, not at boot, so a user must be logged in on the host. A locked screen is fine.
 
@@ -295,6 +297,7 @@ The dashboard is served over plain `http://`. That's expected here. Tailscale en
 
 **Can't connect at all**
 Check that `tailscale status` shows the host online, that `server.host` in `config.yaml` still matches `tailscale ip -4`, and that the server is actually listening: run the `curl .../v1/models` check from section 5. For the server's output, see:
+- Any OS: `main.log` in `~/.ai-cmd-center/auths/logs`, or the dashboard's **Logs Viewer**
 - Windows: `run-proxy.log` and `proxy.out.log` in `<install-dir>`
 - macOS: `~/ai-cmd-center/proxy.log`
 - Linux: `journalctl -u ai-cmd-center`
