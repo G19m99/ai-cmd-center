@@ -9,6 +9,10 @@ A self-hosted proxy for your Claude and ChatGPT/Codex subscriptions. Claude Code
 
 It runs on one machine and is reached over Tailscale only.
 
+## Inspiration
+
+This project was inspired by [Theo's video](https://www.youtube.com/watch?v=D8PikZ1KhUo).
+
 ## Layout
 
 | Path       | What                                                                 |
